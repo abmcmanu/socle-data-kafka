@@ -1,0 +1,14 @@
+# Java
+services/**/target/
+*.class
+# IDE
+.idea/
+.vscode/
+*.iml
+# Lab : secrets et exports locaux
+platform/docker-compose/.env
+platform/docker-compose/config/connect-secrets.properties
+exports/
+platform/ansible/inventories/*/group_vars/vault.yml
+# Python
+__pycache__/
