@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "EnrichedOrder",
+  "namespace": "io.socle.events",
+  "doc": "Commande enrichie avec les attributs du client. Topic : orders.evt.order-enriched.v1, clé = orderId.",
+  "fields": [
+    {"name": "eventId", "type": "string"},
+    {"name": "orderId", "type": "string"},
+    {"name": "customerId", "type": "string"},
+    {"name": "channel", "type": "io.socle.events.Channel"},
+    {"name": "itemCount", "type": "int"},
+    {"name": "totalAmount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
+    {"name": "currency", "type": "string"},
+    {"name": "placedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "customerSegment", "type": ["null", "string"], "default": null, "doc": "null si le client est inconnu du CRM."},
+    {"name": "customerCountry", "type": ["null", "string"], "default": null},
+    {"name": "enrichedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

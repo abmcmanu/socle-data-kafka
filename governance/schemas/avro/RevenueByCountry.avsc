@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "RevenueByCountry",
+  "namespace": "io.socle.events",
+  "doc": "Agrégat par pays et devise sur une fenêtre fixe d'une minute. Topic : analytics.agg.revenue-by-country-1m.v1, clé = pays:devise.",
+  "fields": [
+    {"name": "country", "type": "string", "doc": "Code pays ISO 3166-1 alpha-2, ou UNKNOWN."},
+    {"name": "currency", "type": "string"},
+    {"name": "windowStart", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "windowEnd", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "orderCount", "type": "long"},
+    {"name": "revenue", "type": {"type": "bytes", "logicalType": "decimal", "precision": 14, "scale": 2}}
+  ]
+}

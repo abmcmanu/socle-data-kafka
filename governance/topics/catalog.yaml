@@ -1,0 +1,108 @@
+# Catalogue des topics : source unique de vérité.
+# Toute création ou modification passe par une pull request sur ce fichier.
+# `python3 tools/topics.py` génère :
+#   - governance/generated/create-topics.sh   (lab Docker et Ansible)
+#   - platform/strimzi/topics/*.yaml          (KafkaTopic pour Strimzi)
+# La CI échoue si les fichiers générés ne sont pas à jour.
+#
+# Convention de nommage : <domaine>.<type>.<nom>.v<version>
+#   type : evt (événement métier), cdc (changement de base), agg (agrégat), dlq (rejets)
+
+defaults:
+  replicas: 3
+  config:
+    min.insync.replicas: "2"
+    unclean.leader.election.enable: "false"
+    compression.type: producer
+
+topics:
+  - name: orders.evt.order-placed.v1
+    owner: equipe-commandes
+    description: Commande validée par l'API d'ingestion. Clé = orderId.
+    key: orderId (string)
+    value_schema: io.socle.events.OrderPlaced
+    classification: interne
+    partitions: 12
+    config:
+      cleanup.policy: delete
+      retention.ms: "604800000"        # 7 jours
+      max.message.bytes: "1048576"
+
+  - name: orders.evt.order-enriched.v1
+    owner: equipe-data-plateforme
+    description: Commande enrichie avec le segment et le pays du client. Clé = orderId.
+    key: orderId (string)
+    value_schema: io.socle.events.EnrichedOrder
+    classification: interne
+    partitions: 12
+    config:
+      cleanup.policy: delete
+      retention.ms: "1209600000"       # 14 jours (rejeu des consommateurs aval)
+
+  - name: orders.dlq.order-placed.v1
+    owner: equipe-data-plateforme
+    description: Commandes rejetées par order-enrichment. En-tête dlq.reason obligatoire.
+    key: orderId (string)
+    value_schema: io.socle.events.OrderPlaced
+    classification: interne
+    partitions: 3
+    config:
+      cleanup.policy: delete
+      retention.ms: "2592000000"       # 30 jours pour analyse
+
+  - name: crm.cdc.customers.v1
+    owner: equipe-crm
+    description: Dernier état de chaque client, capturé par Debezium. Clé = id client.
+    key: id (string)
+    value_schema: crm.public.customers.Value (généré par Debezium)
+    classification: donnees-personnelles
+    partitions: 12
+    config:
+      cleanup.policy: compact
+      min.compaction.lag.ms: "3600000"
+      delete.retention.ms: "86400000"
+      segment.ms: "86400000"
+
+  - name: analytics.agg.revenue-by-country-1m.v1
+    owner: equipe-data-plateforme
+    description: Chiffre d'affaires et nombre de commandes par pays et devise, fenêtre d'une minute.
+    key: pays:devise (string)
+    value_schema: io.socle.events.RevenueByCountry
+    classification: interne
+    partitions: 6
+    config:
+      cleanup.policy: delete
+      retention.ms: "2592000000"
+
+  - name: platform.dlq.hdfs-sink.v1
+    owner: equipe-data-plateforme
+    description: Messages que le connecteur HDFS n'a pas pu convertir.
+    key: inchangée
+    value_schema: brut (octets)
+    classification: interne
+    partitions: 3
+    config:
+      cleanup.policy: delete
+      retention.ms: "2592000000"
+
+  # Topics internes de Kafka Connect (créés ici pour maîtriser leur configuration).
+  - name: _platform.connect.configs
+    owner: equipe-data-plateforme
+    description: Configuration des connecteurs (interne Kafka Connect).
+    partitions: 1
+    config:
+      cleanup.policy: compact
+
+  - name: _platform.connect.offsets
+    owner: equipe-data-plateforme
+    description: Offsets des connecteurs source (interne Kafka Connect).
+    partitions: 25
+    config:
+      cleanup.policy: compact
+
+  - name: _platform.connect.status
+    owner: equipe-data-plateforme
+    description: État des connecteurs et des tâches (interne Kafka Connect).
+    partitions: 5
+    config:
+      cleanup.policy: compact

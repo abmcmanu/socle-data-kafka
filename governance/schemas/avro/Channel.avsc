@@ -1,0 +1,8 @@
+{
+  "type": "enum",
+  "name": "Channel",
+  "namespace": "io.socle.events",
+  "doc": "Canal de vente d'origine de la commande.",
+  "symbols": ["WEB", "MOBILE", "STORE", "UNKNOWN"],
+  "default": "UNKNOWN"
+}

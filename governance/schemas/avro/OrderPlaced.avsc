@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name": "OrderPlaced",
+  "namespace": "io.socle.events",
+  "doc": "Commande validée et acceptée par l'API d'ingestion. Topic : orders.evt.order-placed.v1, clé = orderId.",
+  "fields": [
+    {"name": "eventId", "type": "string", "doc": "Identifiant unique de l'événement, sert à la déduplication en aval."},
+    {"name": "orderId", "type": "string"},
+    {"name": "customerId", "type": "string"},
+    {"name": "channel", "type": "io.socle.events.Channel"},
+    {"name": "items", "type": {"type": "array", "items": {
+      "type": "record",
+      "name": "OrderLine",
+      "fields": [
+        {"name": "sku", "type": "string"},
+        {"name": "quantity", "type": "int"},
+        {"name": "unitPrice", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}}
+      ]
+    }}},
+    {"name": "totalAmount", "type": {"type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2}},
+    {"name": "currency", "type": "string", "doc": "Code ISO 4217, par exemple EUR."},
+    {"name": "placedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "Heure de l'événement (event time)."}
+  ]
+}

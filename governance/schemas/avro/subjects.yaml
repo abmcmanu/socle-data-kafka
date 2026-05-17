@@ -1,0 +1,15 @@
+# Association topic -> schéma et niveau de compatibilité (TopicNameStrategy).
+# tools/register_schemas.py enregistre ces schémas (CI / init du lab).
+# En production, les applications ont auto.register.schemas=false : seul ce fichier fait foi.
+defaultCompatibility: BACKWARD_TRANSITIVE
+references:
+  - Channel.avsc
+subjects:
+  - subject: orders.evt.order-placed.v1-value
+    schema: OrderPlaced.avsc
+  - subject: orders.dlq.order-placed.v1-value
+    schema: OrderPlaced.avsc
+  - subject: orders.evt.order-enriched.v1-value
+    schema: EnrichedOrder.avsc
+  - subject: analytics.agg.revenue-by-country-1m.v1-value
+    schema: RevenueByCountry.avsc
