@@ -1,0 +1,19 @@
+# FICHIER GÉNÉRÉ par tools/topics.py — modifier governance/topics/catalog.yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: platform.connect.configs
+  labels:
+    strimzi.io/cluster: socle
+  annotations:
+    socle.io/owner: equipe-data-plateforme
+    socle.io/description: Configuration des connecteurs (interne Kafka Connect).
+spec:
+  topicName: _platform.connect.configs
+  partitions: 1
+  replicas: 3
+  config:
+    min.insync.replicas: '2'
+    unclean.leader.election.enable: 'false'
+    compression.type: producer
+    cleanup.policy: compact

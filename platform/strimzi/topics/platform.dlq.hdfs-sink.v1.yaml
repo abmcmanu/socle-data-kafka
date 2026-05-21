@@ -1,0 +1,20 @@
+# FICHIER GÉNÉRÉ par tools/topics.py — modifier governance/topics/catalog.yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: platform.dlq.hdfs-sink.v1
+  labels:
+    strimzi.io/cluster: socle
+  annotations:
+    socle.io/owner: equipe-data-plateforme
+    socle.io/description: Messages que le connecteur HDFS n'a pas pu convertir.
+spec:
+  topicName: platform.dlq.hdfs-sink.v1
+  partitions: 3
+  replicas: 3
+  config:
+    min.insync.replicas: '2'
+    unclean.leader.election.enable: 'false'
+    compression.type: producer
+    cleanup.policy: delete
+    retention.ms: '2592000000'

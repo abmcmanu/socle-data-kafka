@@ -1,0 +1,23 @@
+# FICHIER GÉNÉRÉ par tools/topics.py — modifier governance/topics/catalog.yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: crm.cdc.customers.v1
+  labels:
+    strimzi.io/cluster: socle
+  annotations:
+    socle.io/owner: equipe-crm
+    socle.io/description: Dernier état de chaque client, capturé par Debezium. Clé
+      = id client.
+spec:
+  topicName: crm.cdc.customers.v1
+  partitions: 12
+  replicas: 3
+  config:
+    min.insync.replicas: '2'
+    unclean.leader.election.enable: 'false'
+    compression.type: producer
+    cleanup.policy: compact
+    min.compaction.lag.ms: '3600000'
+    delete.retention.ms: '86400000'
+    segment.ms: '86400000'

@@ -1,0 +1,13 @@
+# FICHIER GÉNÉRÉ par tools/topics.py
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- analytics.agg.revenue-by-country-1m.v1.yaml
+- crm.cdc.customers.v1.yaml
+- orders.dlq.order-placed.v1.yaml
+- orders.evt.order-enriched.v1.yaml
+- orders.evt.order-placed.v1.yaml
+- platform.connect.configs.yaml
+- platform.connect.offsets.yaml
+- platform.connect.status.yaml
+- platform.dlq.hdfs-sink.v1.yaml
