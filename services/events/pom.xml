@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.socle</groupId>
+    <artifactId>socle-services</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>socle-events</artifactId>
+  <name>Socle Data Kafka - classes Avro générées</name>
+  <description>Classes Java générées depuis governance/schemas/avro (contrats de données).</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-maven-plugin</artifactId>
+        <version>${avro.version}</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals><goal>schema</goal></goals>
+            <configuration>
+              <sourceDirectory>${project.basedir}/../../governance/schemas/avro</sourceDirectory>
+              <outputDirectory>${project.build.directory}/generated-sources/avro</outputDirectory>
+              <!-- Channel est un type partagé : compilé en premier pour être référencé par les autres schémas. -->
+              <imports>
+                <import>${project.basedir}/../../governance/schemas/avro/Channel.avsc</import>
+              </imports>
+              <includes><include>*.avsc</include></includes>
+              <excludes><exclude>Channel.avsc</exclude></excludes>
+              <stringType>String</stringType>
+              <enableDecimalLogicalType>true</enableDecimalLogicalType>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

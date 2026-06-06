@@ -1,0 +1,46 @@
+server:
+  port: 8090
+  shutdown: graceful            # termine les requêtes en cours avant l'arrêt (procédure d'arrêt)
+
+spring:
+  application:
+    name: ingestion-api
+  lifecycle:
+    timeout-per-shutdown-phase: 40s   # > socle.kafka.send-timeout
+
+socle:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    schema-registry-url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+    topic: orders.evt.order-placed.v1
+    send-timeout: 35s
+    # Production : décommenter et fournir les valeurs par variables d'environnement / secrets.
+    # properties:
+    #   security.protocol: SASL_SSL
+    #   sasl.mechanism: SCRAM-SHA-512
+    #   sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="svc-ingestion-api" password="${KAFKA_PASSWORD}";
+    #   ssl.truststore.location: /etc/socle/truststore.p12
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      group:
+        readiness:
+          include: readinessState,kafka
+  metrics:
+    tags:
+      application: ingestion-api
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
