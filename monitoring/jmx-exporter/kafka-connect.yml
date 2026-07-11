@@ -1,0 +1,57 @@
+# Règles JMX Exporter pour Kafka Connect (workers, connecteurs, tâches, erreurs).
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+rules:
+  # État des connecteurs et des tâches : l'attribut est une chaîne ("running", "failed"...).
+  # On produit une série par état avec la valeur 1.
+  - pattern: 'kafka.connect<type=connector-metrics, connector=(.+)><>status: ([a-z-]+)'
+    name: kafka_connect_connector_status
+    value: 1
+    type: GAUGE
+    labels:
+      connector: "$1"
+      status: "$2"
+  - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>status: ([a-z-]+)'
+    name: kafka_connect_connector_task_status
+    value: 1
+    type: GAUGE
+    labels:
+      connector: "$1"
+      task: "$2"
+      status: "$3"
+
+  # Erreurs et DLQ par tâche.
+  - pattern: kafka.connect<type=task-error-metrics, connector=(.+), task=(.+)><>(total-record-errors|total-record-failures|deadletterqueue-produce-requests|total-errors-logged)
+    name: kafka_connect_task_error_$3
+    type: GAUGE
+    labels:
+      connector: "$1"
+      task: "$2"
+
+  # Débits source / sink.
+  - pattern: kafka.connect<type=(source|sink)-task-metrics, connector=(.+), task=(.+)><>([a-z-]+)
+    name: kafka_connect_$1_task_$4
+    type: GAUGE
+    labels:
+      connector: "$2"
+      task: "$3"
+
+  # Métriques du worker (nombre de connecteurs, tâches en échec, rebalances).
+  - pattern: kafka.connect<type=connect-worker-metrics><>([a-z-]+)
+    name: kafka_connect_worker_$1
+    type: GAUGE
+  - pattern: kafka.connect<type=connect-worker-rebalance-metrics><>([a-z-]+)
+    name: kafka_connect_worker_rebalance_$1
+    type: GAUGE
+
+  # Clients Kafka embarqués (lag des connecteurs sink, erreurs des producers source).
+  - pattern: kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+)><>records-lag-max
+    name: kafka_connect_consumer_records_lag_max
+    type: GAUGE
+    labels:
+      client_id: "$1"
+  - pattern: kafka.producer<type=producer-metrics, client-id=(.+)><>(record-error-rate|record-send-rate|request-latency-avg)
+    name: kafka_connect_producer_$2
+    type: GAUGE
+    labels:
+      client_id: "$1"

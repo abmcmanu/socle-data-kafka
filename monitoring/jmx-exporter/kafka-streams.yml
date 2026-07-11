@@ -1,0 +1,33 @@
+# Règles JMX Exporter pour les applications Kafka Streams (order-enrichment).
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+rules:
+  # État du client Streams : RUNNING, REBALANCING, ERROR... (une série par état, valeur 1).
+  - pattern: 'kafka.streams<type=stream-metrics, client-id=(.+)><>state: (.+)'
+    name: kafka_streams_client_state
+    value: 1
+    type: GAUGE
+    labels:
+      client_id: "$1"
+      state: "$2"
+  - pattern: kafka.streams<type=stream-thread-metrics, thread-id=(.+)><>(process-rate|process-latency-avg|commit-rate|commit-latency-avg|poll-rate|punctuate-rate)
+    name: kafka_streams_thread_$2
+    type: GAUGE
+    labels:
+      thread_id: "$1"
+  - pattern: kafka.streams<type=stream-task-metrics, thread-id=(.+), task-id=(.+)><>(dropped-records-total|active-process-ratio)
+    name: kafka_streams_task_$3
+    type: GAUGE
+    labels:
+      thread_id: "$1"
+      task_id: "$2"
+  - pattern: kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+)><>records-lag-max
+    name: kafka_streams_consumer_records_lag_max
+    type: GAUGE
+    labels:
+      client_id: "$1"
+  - pattern: kafka.producer<type=producer-metrics, client-id=(.+)><>(record-error-rate|record-send-rate|txn-commit-time-ns-total|txn-abort-time-ns-total)
+    name: kafka_streams_producer_$2
+    type: GAUGE
+    labels:
+      client_id: "$1"
