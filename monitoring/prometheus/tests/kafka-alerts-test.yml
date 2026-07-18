@@ -1,0 +1,58 @@
+# Tests unitaires des alertes : promtool test rules monitoring/prometheus/tests/kafka-alerts-test.yml
+rule_files:
+  - ../rules/kafka-alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: un broker sur trois perd une réplica -> sous min ISR après 1 minute
+    interval: 1m
+    input_series:
+      - series: 'kafka_server_replicamanager_underminisrpartitioncount{instance="broker-1"}'
+        values: '0 0 4 4 4'
+      - series: 'kafka_server_replicamanager_underminisrpartitioncount{instance="broker-2"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: KafkaUnderMinIsrPartitions
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: KafkaUnderMinIsrPartitions
+        exp_alerts:
+          - exp_labels: {severity: critical, team: plateforme}
+            exp_annotations:
+              summary: "4 partition(s) sous min.insync.replicas"
+              description: "Les écritures acks=all sont rejetées (NotEnoughReplicas) sur ces partitions."
+              runbook: docs/exploitation/04-runbooks.md#rb-04--réplication-dégradée
+
+  - name: deux contrôleurs perdus -> quorum perdu
+    interval: 1m
+    input_series:
+      - series: 'up{job="kafka-controllers", instance="controller-1"}'
+        values: '1 1 1 1'
+      - series: 'up{job="kafka-controllers", instance="controller-2"}'
+        values: '1 0 0 0'
+      - series: 'up{job="kafka-controllers", instance="controller-3"}'
+        values: '1 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: KafkaControllerQuorumAtRisk
+        exp_alerts:
+          - exp_labels: {severity: critical, team: plateforme}
+            exp_annotations:
+              summary: "Quorum KRaft perdu : moins de 2 contrôleurs sur 3"
+              description: "Plus aucune modification de métadonnées possible (élections, création de topics)."
+              runbook: docs/exploitation/04-runbooks.md#rb-02--quorum-kraft
+
+  - name: tâche Debezium en échec
+    interval: 1m
+    input_series:
+      - series: 'kafka_connect_connector_task_status{connector="crm-customers-cdc", task="0", status="failed"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: KafkaConnectTaskFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, team: plateforme, connector: crm-customers-cdc, task: "0", status: failed}
+            exp_annotations:
+              summary: "Tâche 0 du connecteur crm-customers-cdc en échec"
+              description: "Une tâche en échec ne redémarre pas seule. Lire la trace via l'API REST /status."
+              runbook: docs/exploitation/04-runbooks.md#rb-08--kafka-connect-en-échec

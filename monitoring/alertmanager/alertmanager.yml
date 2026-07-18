@@ -1,0 +1,58 @@
+# Routage des alertes.
+# - critical  -> astreinte (24/7), répétition toutes les heures
+# - warning   -> équipe en heures ouvrées, regroupée
+# Les canaux réels (SMTP, Slack, PagerDuty...) sont renseignés par Ansible ou un Secret
+# Kubernetes ; le lab n'envoie rien (receveurs sans configuration) mais l'interface
+# http://localhost:9093 montre les alertes et le routage.
+global:
+  resolve_timeout: 5m
+  # smtp_smarthost: smtp.interne:587          # servitude S-09
+  # smtp_from: alertes-socle@entreprise.fr
+
+route:
+  receiver: equipe-plateforme
+  group_by: [alertname, cluster]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [alertname="Watchdog"]
+      receiver: watchdog
+      repeat_interval: 5m
+    - matchers: [severity="critical"]
+      receiver: astreinte
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+    - matchers: [team="commandes"]
+      receiver: equipe-commandes
+    - matchers: [team="systeme"]
+      receiver: equipe-systeme
+
+# Une cause racine ne doit pas noyer l'astreinte sous ses conséquences.
+inhibit_rules:
+  - source_matchers: [alertname="KafkaBrokerDown"]
+    target_matchers: [alertname=~"KafkaUnderReplicatedPartitions|KafkaIsrFlapping|KafkaProduceLatencyHigh"]
+    equal: [cluster]
+  - source_matchers: [alertname="KafkaControllerQuorumAtRisk"]
+    target_matchers: [alertname=~"KafkaControllerDown|KafkaNoActiveController"]
+    equal: [cluster]
+  - source_matchers: [alertname="DiskUsageCritical"]
+    target_matchers: [alertname="DiskUsageHigh"]
+    equal: [instance, mountpoint]
+  - source_matchers: [alertname="KafkaConnectWorkerDown"]
+    target_matchers: [alertname=~"KafkaConnectConnectorFailed|KafkaConnectTaskFailed"]
+    equal: [cluster]
+
+receivers:
+  - name: equipe-plateforme
+    # email_configs:
+    #   - to: plateforme-data@entreprise.fr
+  - name: astreinte
+    # webhook_configs:
+    #   - url: https://outil-astreinte.interne/hooks/socle-data
+  - name: watchdog
+    # webhook_configs:
+    #   - url: https://dead-mans-switch.interne/ping/socle-data
+  - name: equipe-commandes
+  - name: equipe-systeme
