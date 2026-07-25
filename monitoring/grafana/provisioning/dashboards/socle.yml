@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: socle
+    folder: Socle Data
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false   # les tableaux de bord se modifient dans tools/gen_dashboards.py
+    options:
+      path: /var/lib/grafana/dashboards
