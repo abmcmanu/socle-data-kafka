@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# Client d'administration pour les outils CLI : --command-config {{ kafka_conf_dir }}/admin.properties
+{% if kafka_security_enabled %}
+security.protocol=SASL_SSL
+sasl.mechanism={{ kafka_sasl_mechanism }}
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="admin" password="{{ vault_kafka_admin_password }}";
+ssl.truststore.type=PKCS12
+ssl.truststore.location={{ kafka_ssl_truststore }}
+ssl.truststore.password={{ vault_kafka_ssl_truststore_password }}
+{% else %}
+security.protocol=PLAINTEXT
+{% endif %}

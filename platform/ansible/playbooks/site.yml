@@ -1,0 +1,36 @@
+# Déploiement complet du socle sur VM.
+#   ansible-playbook -i inventories/prod/hosts.yml playbooks/site.yml --ask-vault-pass
+# Ordre imposé par KRaft : le quorum de contrôleurs doit exister avant les brokers.
+- name: Socle système et agents de supervision
+  hosts: all
+  roles: [common, monitoring_agent]
+
+- name: Quorum KRaft (contrôleurs) — démarrage simultané, la majorité est nécessaire
+  hosts: kafka_controllers
+  roles: [kafka]
+
+- name: Brokers — un par un pour ne jamais perdre deux réplicas d'une partition
+  hosts: kafka_brokers
+  serial: 1
+  roles: [kafka]
+
+- name: Catalogue des topics (gouvernance as code)
+  import_playbook: apply-topics.yml
+
+- name: Schema Registry
+  hosts: schema_registry
+  roles: [schema_registry]
+
+- name: Kafka Connect (binaires Kafka + worker)
+  hosts: kafka_connect
+  roles:
+    - role: kafka
+      vars: {kafka_install_only: true}
+    - kafka_connect
+
+- name: Pile de supervision
+  hosts: monitoring
+  roles: [monitoring_stack]
+
+- name: Contrôle final
+  import_playbook: healthcheck.yml

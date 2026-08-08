@@ -1,0 +1,8 @@
+profile: production
+exclude_paths:
+  - exports/
+skip_list:
+  - yaml[line-length]
+  - name[template]
+  # Variables volontairement partagées entre rôles (kafka_security_enabled, connect_*, etc.).
+  - var-naming[no-role-prefix]

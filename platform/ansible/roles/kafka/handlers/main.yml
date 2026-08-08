@@ -1,0 +1,7 @@
+# En production, un changement de configuration n'est JAMAIS appliqué par un redémarrage simultané :
+# ce handler ne fait que signaler. Appliquer avec playbooks/rolling-restart.yml (un nœud à la fois).
+- name: Kafka à redémarrer
+  ansible.builtin.debug:
+    msg: >-
+      Configuration modifiée sur {{ inventory_hostname }}. Lancer :
+      ansible-playbook playbooks/rolling-restart.yml --limit {{ inventory_hostname }}

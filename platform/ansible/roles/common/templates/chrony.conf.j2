@@ -1,0 +1,8 @@
+# Géré par Ansible (rôle common). Kafka exige des horloges synchronisées :
+# timestamps des événements, fenêtres Kafka Streams, expiration des certificats et jetons.
+{% for server in socle_ntp_servers %}
+server {{ server }} iburst
+{% endfor %}
+driftfile /var/lib/chrony/chrony.drift
+makestep 1.0 3
+rtcsync

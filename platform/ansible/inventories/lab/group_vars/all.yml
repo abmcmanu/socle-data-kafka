@@ -1,0 +1,4 @@
+kafka_cluster_id: "4L6g3nShT-eMCtK--X86sw"
+kafka_security_enabled: false
+kafka_heap_broker: "-Xms1g -Xmx1g"
+kafka_heap_controller: "-Xms512m -Xmx512m"

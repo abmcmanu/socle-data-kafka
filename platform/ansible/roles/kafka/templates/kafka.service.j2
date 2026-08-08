@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Apache Kafka {{ kafka_version }} ({{ kafka_process_role }} {{ kafka_node_id }})
+Documentation=https://kafka.apache.org/documentation/
+Wants=network-online.target chrony.service
+After=network-online.target chrony.service
+
+[Service]
+Type=simple
+User=kafka
+Group=kafka
+Environment="KAFKA_HEAP_OPTS={{ kafka_heap_opts }}"
+Environment="KAFKA_OPTS=-javaagent:{{ kafka_jmx_exporter_jar }}={{ kafka_jmx_exporter_port }}:/etc/jmx-exporter/kafka-broker.yml"
+Environment="LOG_DIR={{ kafka_app_log_dir }}"
+ExecStart={{ kafka_install_dir }}/bin/kafka-server-start.sh {{ kafka_conf_dir }}/server.properties
+# Arrêt contrôlé : SIGTERM -> le broker transfère ses leaderships avant de s'arrêter.
+ExecStop={{ kafka_install_dir }}/bin/kafka-server-stop.sh
+KillSignal=SIGTERM
+TimeoutStopSec=300
+SuccessExitStatus=143
+LimitNOFILE={{ socle_nofile_limit | default(128000) }}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

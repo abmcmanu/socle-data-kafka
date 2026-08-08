@@ -1,0 +1,16 @@
+# Identifiant KRaft : généré une seule fois (kafka-storage.sh random-uuid) et ne doit JAMAIS changer.
+kafka_cluster_id: "REMPLACER-PAR-kafka-storage-random-uuid"
+kafka_security_enabled: true
+kafka_sasl_mechanism: SCRAM-SHA-512
+kafka_heap_broker: "-Xms6g -Xmx6g"
+kafka_heap_controller: "-Xms2g -Xmx2g"
+kafka_log_dirs: ["/data/kafka/disk1", "/data/kafka/disk2"]
+# PKI interne (servitude S-04) : fichiers déposés par l'équipe sécurité, mots de passe dans le vault.
+kafka_ssl_keystore: "/etc/kafka/ssl/{{ inventory_hostname }}.p12"
+kafka_ssl_truststore: /etc/kafka/ssl/truststore.p12
+# Servitudes (docs/exploitation/01-servitudes.md)
+socle_ntp_servers: ["ntp1.interne", "ntp2.interne"]
+socle_hdfs_url: "hdfs://nn-ha.datalake.interne:8020"
+socle_kerberos_realm: DATALAKE.INTERNE
+alertmanager_smtp_smarthost: "smtp.interne:587"
+alertmanager_email_to: "plateforme-data@entreprise.fr"

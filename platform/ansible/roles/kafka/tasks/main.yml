@@ -1,0 +1,103 @@
+# Installe et configure un nœud Kafka KRaft (contrôleur ou broker selon le groupe d'inventaire).
+- name: Vérifier les variables obligatoires
+  ansible.builtin.assert:
+    that:
+      - kafka_node_id is defined
+      - kafka_cluster_id is defined
+      - "'REMPLACER' not in kafka_cluster_id"
+      - socle_env != 'prod' or kafka_sha512 | length == 128
+    fail_msg: "kafka_node_id et kafka_cluster_id sont obligatoires (inventaire)."
+  when: not (kafka_install_only | default(false))
+
+- name: Répertoires Kafka
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: "0750"
+  loop: "{{ kafka_log_dirs + [kafka_conf_dir, kafka_app_log_dir] }}"
+  become: true
+
+- name: Télécharger Kafka {{ kafka_version }} (somme de contrôle vérifiée)
+  ansible.builtin.get_url:
+    url: "{{ kafka_download_url }}"
+    dest: "/tmp/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+    checksum: "{{ ('sha512:' + kafka_sha512) if kafka_sha512 else omit }}"
+    mode: "0644"
+  become: true
+
+- name: Décompresser dans /opt
+  ansible.builtin.unarchive:
+    src: "/tmp/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz"
+    dest: /opt
+    remote_src: true
+    owner: kafka
+    group: kafka
+    creates: "/opt/kafka_{{ kafka_scala_version }}-{{ kafka_version }}/bin/kafka-server-start.sh"
+  become: true
+
+- name: Lien /opt/kafka vers la version courante (montée de version = changer le lien)
+  ansible.builtin.file:
+    src: "/opt/kafka_{{ kafka_scala_version }}-{{ kafka_version }}"
+    dest: "{{ kafka_install_dir }}"
+    state: link
+  become: true
+  notify: Kafka à redémarrer
+
+- name: Configuration server.properties
+  ansible.builtin.template:
+    src: server.properties.j2
+    dest: "{{ kafka_conf_dir }}/server.properties"
+    owner: kafka
+    group: kafka
+    mode: "0640"
+  become: true
+  notify: Kafka à redémarrer
+  when: not (kafka_install_only | default(false))
+
+- name: Configuration client d'administration (CLI)
+  ansible.builtin.template:
+    src: admin.properties.j2
+    dest: "{{ kafka_conf_dir }}/admin.properties"
+    owner: kafka
+    group: kafka
+    mode: "0600"
+  become: true
+  when: not (kafka_install_only | default(false))
+
+- name: Formater le stockage KRaft (une seule fois, idempotent)
+  ansible.builtin.command:
+    cmd: >-
+      {{ kafka_install_dir }}/bin/kafka-storage.sh format
+      --cluster-id {{ kafka_cluster_id }}
+      --config {{ kafka_conf_dir }}/server.properties
+      --ignore-formatted
+    creates: "{{ kafka_log_dirs[0] }}/meta.properties"
+  become: true
+  become_user: kafka
+  when: not (kafka_install_only | default(false))
+
+- name: Unité systemd
+  ansible.builtin.template:
+    src: kafka.service.j2
+    dest: /etc/systemd/system/kafka.service
+    mode: "0644"
+  become: true
+  notify: Kafka à redémarrer
+  when: not (kafka_install_only | default(false))
+
+- name: Kafka démarré et activé
+  ansible.builtin.systemd_service:
+    name: kafka
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+  when: not (kafka_install_only | default(false))
+
+- name: Attendre l'ouverture du port
+  ansible.builtin.wait_for:
+    port: "{{ kafka_controller_port if kafka_process_role == 'controller' else kafka_client_port }}"
+    timeout: 120
+  when: not (kafka_install_only | default(false))

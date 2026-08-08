@@ -1,0 +1,7 @@
+# Copier en vault.yml puis chiffrer : ansible-vault encrypt inventories/prod/group_vars/vault.yml
+vault_kafka_ssl_keystore_password: "changeme"
+vault_kafka_ssl_truststore_password: "changeme"
+vault_kafka_admin_password: "changeme"
+vault_kafka_broker_password: "changeme"
+vault_grafana_admin_password: "changeme"
+vault_crm_debezium_password: "changeme"

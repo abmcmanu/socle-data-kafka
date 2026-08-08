@@ -1,0 +1,55 @@
+# Agent JMX Exporter (métriques Kafka) + node_exporter (disque, CPU, NTP) sur chaque machine.
+- name: Répertoires des exporteurs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/opt/jmx-exporter, /etc/jmx-exporter]
+  become: true
+
+- name: Agent JMX Exporter
+  ansible.builtin.get_url:
+    url: "{{ jmx_exporter_url }}"
+    dest: /opt/jmx-exporter/jmx_prometheus_javaagent.jar
+    mode: "0644"
+  become: true
+
+- name: Règles JMX (mêmes fichiers que le lab et Strimzi)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../monitoring/jmx-exporter/{{ item }}"
+    dest: "/etc/jmx-exporter/{{ item }}"
+    mode: "0644"
+  loop: [kafka-broker.yml, kafka-connect.yml, schema-registry.yml]
+  become: true
+
+- name: Installer node_exporter
+  ansible.builtin.unarchive:
+    src: "{{ node_exporter_url }}"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+  become: true
+
+- name: Unité systemd node_exporter
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Prometheus node_exporter
+      After=network-online.target
+      [Service]
+      User=nobody
+      ExecStart=/opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter --collector.timex --collector.systemd
+      Restart=on-failure
+      [Install]
+      WantedBy=multi-user.target
+  become: true
+
+- name: Service node_exporter démarré
+  ansible.builtin.systemd_service:
+    name: node_exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true

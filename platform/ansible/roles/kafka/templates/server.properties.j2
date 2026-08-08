@@ -1,0 +1,52 @@
+# {{ ansible_managed }}
+# Nœud KRaft {{ inventory_hostname }} — rôle : {{ kafka_process_role }}
+process.roles={{ kafka_process_role }}
+node.id={{ kafka_node_id }}
+controller.quorum.voters={% for h in groups['kafka_controllers'] %}{{ hostvars[h].kafka_node_id }}@{{ hostvars[h].ansible_host | default(h) }}:{{ kafka_controller_port }}{{ ',' if not loop.last }}{% endfor %}
+
+controller.listener.names=CONTROLLER
+log.dirs={{ kafka_log_dirs | join(',') }}
+
+{% if kafka_process_role == 'controller' %}
+listeners=CONTROLLER://0.0.0.0:{{ kafka_controller_port }}
+{% if kafka_security_enabled %}
+listener.security.protocol.map=CONTROLLER:SSL
+{% else %}
+listener.security.protocol.map=CONTROLLER:PLAINTEXT
+{% endif %}
+{% else %}
+broker.rack={{ kafka_rack }}
+listeners=INTERNAL://0.0.0.0:{{ kafka_internal_port }},CLIENT://0.0.0.0:{{ kafka_client_port }}
+advertised.listeners=INTERNAL://{{ ansible_host | default(inventory_hostname) }}:{{ kafka_internal_port }},CLIENT://{{ inventory_hostname }}:{{ kafka_client_port }}
+inter.broker.listener.name=INTERNAL
+{% if kafka_security_enabled %}
+listener.security.protocol.map=CONTROLLER:SSL,INTERNAL:SSL,CLIENT:SASL_SSL
+sasl.enabled.mechanisms={{ kafka_sasl_mechanism }}
+listener.name.client.{{ kafka_sasl_mechanism | lower }}.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required;
+{% else %}
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,CLIENT:PLAINTEXT
+{% endif %}
+{% for key, value in kafka_broker_config.items() %}
+{{ key }}={{ value | string | lower if value is boolean else value }}
+{% endfor %}
+{% endif %}
+
+{% if kafka_security_enabled %}
+# --- Sécurité (docs/architecture/04-securite.md) : mTLS entre nœuds, SCRAM pour les clients
+ssl.keystore.type=PKCS12
+ssl.keystore.location={{ kafka_ssl_keystore }}
+ssl.keystore.password={{ vault_kafka_ssl_keystore_password }}
+ssl.truststore.type=PKCS12
+ssl.truststore.location={{ kafka_ssl_truststore }}
+ssl.truststore.password={{ vault_kafka_ssl_truststore_password }}
+ssl.client.auth=required
+ssl.endpoint.identification.algorithm=https
+listener.name.client.ssl.client.auth=none
+authorizer.class.name=org.apache.kafka.metadata.authorizer.StandardAuthorizer
+allow.everyone.if.no.acl.found=false
+# CN du certificat -> principal court (User:kbrk-a1.socle.interne), comme les utilisateurs SCRAM (User:admin).
+ssl.principal.mapping.rules=RULE:^CN=([^,]+).*$/$1/,DEFAULT
+super.users=User:admin{% for h in groups['kafka_cluster'] %};User:{{ h }}{% endfor %}
+
+
+{% endif %}

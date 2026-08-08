@@ -1,0 +1,50 @@
+# Socle système commun à toutes les machines du socle (servitudes OS).
+- name: Paquets de base et Java 21
+  ansible.builtin.apt:
+    name: ["{{ socle_java_package }}", chrony, curl, unzip, jq, openssl]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Paramètres noyau pour Kafka
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/60-socle-kafka.conf
+    reload: true
+  loop: "{{ socle_sysctl | dict2items }}"
+  become: true
+
+- name: Limite de fichiers ouverts pour l'utilisateur kafka
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/60-kafka.conf
+    content: |
+      kafka soft nofile {{ socle_nofile_limit }}
+      kafka hard nofile {{ socle_nofile_limit }}
+    mode: "0644"
+  become: true
+
+- name: Groupe et utilisateur de service kafka
+  ansible.builtin.user:
+    name: kafka
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+  become: true
+
+- name: Serveurs NTP (servitude S-02)
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    mode: "0644"
+  when: socle_ntp_servers | length > 0
+  notify: Redémarrer chrony
+  become: true
+
+- name: Chrony actif
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+  become: true
