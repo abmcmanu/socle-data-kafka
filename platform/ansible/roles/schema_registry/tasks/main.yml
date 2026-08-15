@@ -1,0 +1,48 @@
+# Schema Registry depuis le dépôt APT Confluent (paquets communautaires).
+- name: Clé du dépôt Confluent
+  ansible.builtin.get_url:
+    url: "https://packages.confluent.io/deb/{{ confluent_version }}/archive.key"
+    dest: /etc/apt/keyrings/confluent.asc
+    mode: "0644"
+  become: true
+
+- name: Dépôt APT Confluent
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/confluent.asc] https://packages.confluent.io/deb/{{ confluent_version }} stable main"
+    filename: confluent
+  become: true
+
+- name: Paquet Schema Registry
+  ansible.builtin.apt:
+    name: confluent-schema-registry
+    state: present
+    update_cache: true
+  become: true
+
+- name: Configuration
+  ansible.builtin.template:
+    src: schema-registry.properties.j2
+    dest: /etc/schema-registry/schema-registry.properties
+    mode: "0640"
+    owner: root
+    group: confluent
+  become: true
+  notify: Redémarrer schema-registry
+
+- name: Agent JMX pour la supervision
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/confluent-schema-registry.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      Environment="EXTRA_ARGS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar={{ schema_registry_jmx_port }}:/etc/jmx-exporter/schema-registry.yml"
+  become: true
+  notify: Redémarrer schema-registry
+
+- name: Service démarré
+  ansible.builtin.systemd_service:
+    name: confluent-schema-registry
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true

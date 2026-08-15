@@ -1,0 +1,58 @@
+# {{ ansible_managed }}
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: socle-{{ socle_env }}
+    environment: {{ socle_env }}
+rule_files: [/etc/prometheus/rules/*.yml]
+alerting:
+  alertmanagers:
+    - static_configs: [{targets: ["alertmanager:9093"]}]
+scrape_configs:
+  - job_name: kafka-controllers
+    static_configs:
+      - targets: [{% for h in groups['kafka_controllers'] %}"{{ h }}:7071"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: &short
+      - {source_labels: [__address__], regex: "([^:]+):.*", target_label: instance, replacement: "$1"}
+  - job_name: kafka-brokers
+    static_configs:
+      - targets: [{% for h in groups['kafka_brokers'] %}"{{ h }}:7071"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: *short
+  - job_name: kafka-connect
+    static_configs:
+      - targets: [{% for h in groups['kafka_connect'] %}"{{ h }}:7072"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: *short
+  - job_name: schema-registry
+    static_configs:
+      - targets: [{% for h in groups['schema_registry'] %}"{{ h }}:7073"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: *short
+  - job_name: node
+    static_configs:
+      - targets: [{% for h in groups['all'] %}"{{ h }}:9100"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: *short
+  - job_name: kafka-exporter
+    static_configs: [{targets: ["kafka-exporter:9308"]}]
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params: {module: [http_2xx]}
+    static_configs:
+      - targets:
+{% for h in groups['schema_registry'] %}
+          - http://{{ h }}:8081/subjects
+{% endfor %}
+{% for h in groups['kafka_connect'] %}
+          - http://{{ h }}:8083/
+{% endfor %}
+    relabel_configs: &probe
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: "blackbox-exporter:9115"}
+{% if kafka_security_enabled %}
+  - job_name: blackbox-tls
+    metrics_path: /probe
+    params: {module: [tls_connect]}
+    static_configs:
+      - targets: [{% for h in groups['kafka_brokers'] %}"{{ h }}:9092"{{ ', ' if not loop.last }}{% endfor %}]
+    relabel_configs: *probe
+{% endif %}

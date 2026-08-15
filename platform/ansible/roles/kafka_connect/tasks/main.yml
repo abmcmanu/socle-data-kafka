@@ -1,0 +1,81 @@
+# Worker Kafka Connect distribué. Réutilise les binaires installés par le rôle kafka
+# (exécuter le rôle kafka avec kafka_install_only=true, voir playbooks/site.yml).
+- name: Répertoires
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: "0750"
+  loop: ["{{ connect_plugin_dir }}", /etc/kafka-connect, /var/log/kafka-connect]
+  become: true
+
+- name: "Plugins (un répertoire par plugin : isolation des classpaths)"
+  ansible.builtin.unarchive:
+    src: "{{ item.url }}"
+    dest: "{{ connect_plugin_dir }}"
+    remote_src: true
+    owner: kafka
+    group: kafka
+    creates: "{{ connect_plugin_dir }}/{{ item.name }}"
+  loop: "{{ connect_plugins }}"
+  become: true
+
+- name: Secrets des connecteurs (lus par FileConfigProvider)
+  ansible.builtin.copy:
+    dest: /etc/kafka-connect/connect-secrets.properties
+    owner: kafka
+    group: kafka
+    mode: "0600"
+    content: |
+      crm.user=debezium
+      crm.password={{ vault_crm_debezium_password | default('') }}
+      kafka.password={{ vault_connect_kafka_password | default('') }}
+  become: true
+  no_log: true
+
+- name: Configuration du worker
+  ansible.builtin.template:
+    src: connect-distributed.properties.j2
+    dest: /etc/kafka-connect/connect-distributed.properties
+    owner: kafka
+    group: kafka
+    mode: "0640"
+  become: true
+
+- name: Unité systemd
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/kafka-connect.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Kafka Connect (distribué, groupe {{ connect_group_id }})
+      After=network-online.target
+      [Service]
+      User=kafka
+      Environment="KAFKA_HEAP_OPTS={{ connect_heap_opts }}"
+      Environment="KAFKA_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar={{ connect_jmx_port }}:/etc/jmx-exporter/kafka-connect.yml"
+      Environment="LOG_DIR=/var/log/kafka-connect"
+      ExecStart=/opt/kafka/bin/connect-distributed.sh /etc/kafka-connect/connect-distributed.properties
+      TimeoutStopSec=120
+      SuccessExitStatus=143
+      Restart=on-failure
+      [Install]
+      WantedBy=multi-user.target
+  become: true
+
+- name: Service démarré
+  ansible.builtin.systemd_service:
+    name: kafka-connect
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Attendre l'API REST
+  ansible.builtin.uri:
+    url: "http://localhost:{{ connect_rest_port }}/connectors"
+  register: connect_rest
+  until: connect_rest.status == 200
+  retries: 30
+  delay: 5

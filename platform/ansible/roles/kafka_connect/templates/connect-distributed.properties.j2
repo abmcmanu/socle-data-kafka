@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+bootstrap.servers={% for h in groups['kafka_brokers'] %}{{ h }}:9092{{ ',' if not loop.last }}{% endfor %}
+
+group.id={{ connect_group_id }}
+config.storage.topic=_platform.connect.configs
+offset.storage.topic=_platform.connect.offsets
+status.storage.topic=_platform.connect.status
+config.storage.replication.factor=3
+offset.storage.replication.factor=3
+status.storage.replication.factor=3
+key.converter=org.apache.kafka.connect.storage.StringConverter
+value.converter=io.confluent.connect.avro.AvroConverter
+value.converter.schema.registry.url=http://{{ groups['schema_registry'][0] }}:8081
+plugin.path={{ connect_plugin_dir }}
+listeners=http://0.0.0.0:{{ connect_rest_port }}
+rest.advertised.host.name={{ inventory_hostname }}
+config.providers=file
+config.providers.file.class=org.apache.kafka.common.config.provider.FileConfigProvider
+connector.client.config.override.policy=All
+# Évolution possible : exactly.once.source.support=enabled (KIP-618), impose des ACL TransactionalId.
+{% if kafka_security_enabled %}
+security.protocol=SASL_SSL
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="svc-connect" password="${file:/etc/kafka-connect/connect-secrets.properties:kafka.password}";
+ssl.truststore.location={{ kafka_ssl_truststore }}
+ssl.truststore.password={{ vault_kafka_ssl_truststore_password }}
+producer.security.protocol=SASL_SSL
+producer.sasl.mechanism=SCRAM-SHA-512
+producer.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="svc-connect" password="${file:/etc/kafka-connect/connect-secrets.properties:kafka.password}";
+consumer.security.protocol=SASL_SSL
+consumer.sasl.mechanism=SCRAM-SHA-512
+consumer.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="svc-connect" password="${file:/etc/kafka-connect/connect-secrets.properties:kafka.password}";
+{% endif %}

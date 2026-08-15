@@ -1,0 +1,56 @@
+# Pile de supervision (Prometheus, Alertmanager, Grafana, kafka-exporter, blackbox) sur l'hôte monitoring.
+# Mêmes règles d'alerte et tableaux de bord que le lab : copiés depuis monitoring/ du dépôt.
+- name: Docker présent
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+  become: true
+
+- name: Arborescence
+  ansible.builtin.file:
+    path: "{{ monitoring_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [prometheus, prometheus/rules, alertmanager, blackbox, grafana]
+  become: true
+
+- name: Règles d'alerte, tableaux de bord, provisioning Grafana, blackbox
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../../../monitoring/{{ item.src }}"
+    dest: "{{ monitoring_dir }}/{{ item.dest }}"
+    delete: true
+  loop:
+    - {src: prometheus/rules/, dest: prometheus/rules/}
+    - {src: grafana/, dest: grafana/}
+    - {src: blackbox/, dest: blackbox/}
+  become: true
+  notify: Recharger la supervision
+
+- name: Configuration Prometheus générée depuis l'inventaire
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ monitoring_dir }}/prometheus/prometheus.yml"
+    mode: "0644"
+  become: true
+  notify: Recharger la supervision
+
+- name: Configuration Alertmanager (canaux réels)
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ monitoring_dir }}/alertmanager/alertmanager.yml"
+    mode: "0640"
+  become: true
+  notify: Recharger la supervision
+
+- name: Fichier compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ monitoring_dir }}/docker-compose.yml"
+    mode: "0640"
+  become: true
+
+- name: Pile démarrée
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring_dir }}"
+    state: present
+  become: true

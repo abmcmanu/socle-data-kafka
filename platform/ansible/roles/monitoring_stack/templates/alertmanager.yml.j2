@@ -1,0 +1,28 @@
+# {{ ansible_managed }} — même routage que monitoring/alertmanager/alertmanager.yml, avec les canaux réels.
+global:
+  resolve_timeout: 5m
+{% if alertmanager_smtp_smarthost %}
+  smtp_smarthost: "{{ alertmanager_smtp_smarthost }}"
+  smtp_from: "alertes-socle@{{ socle_env }}.interne"
+{% endif %}
+route:
+  receiver: equipe-plateforme
+  group_by: [alertname, cluster]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - {matchers: [severity="critical"], receiver: astreinte, group_wait: 10s, repeat_interval: 1h}
+inhibit_rules:
+  - source_matchers: [alertname="KafkaBrokerDown"]
+    target_matchers: [alertname=~"KafkaUnderReplicatedPartitions|KafkaIsrFlapping|KafkaProduceLatencyHigh"]
+    equal: [cluster]
+receivers:
+  - name: equipe-plateforme
+{% if alertmanager_email_to %}
+    email_configs: [{to: "{{ alertmanager_email_to }}"}]
+{% endif %}
+  - name: astreinte
+{% if alertmanager_webhook_url is defined %}
+    webhook_configs: [{url: "{{ alertmanager_webhook_url }}"}]
+{% endif %}

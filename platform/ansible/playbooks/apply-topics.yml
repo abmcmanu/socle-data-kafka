@@ -1,0 +1,24 @@
+# Applique governance/generated/create-topics.sh (généré depuis governance/topics/catalog.yaml).
+- name: Appliquer le catalogue des topics
+  hosts: kafka_brokers[0]
+  become: true
+  become_user: kafka
+  tasks:
+    - name: Copier le script généré
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../governance/generated/create-topics.sh"
+        dest: /tmp/create-topics.sh
+        mode: "0750"
+
+    - name: Appliquer (idempotent)
+      ansible.builtin.command: /tmp/create-topics.sh
+      environment:
+        BOOTSTRAP: "{{ inventory_hostname }}:9092"
+        KAFKA_BIN: /opt/kafka/bin
+        CMD_CONFIG: /etc/kafka/admin.properties
+      register: topics_out
+      changed_when: "'création' in topics_out.stdout or '->' in topics_out.stdout"
+
+    - name: Résultat
+      ansible.builtin.debug:
+        var: topics_out.stdout_lines

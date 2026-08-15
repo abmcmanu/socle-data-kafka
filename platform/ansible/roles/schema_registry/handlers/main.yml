@@ -1,0 +1,6 @@
+- name: Redémarrer schema-registry
+  ansible.builtin.systemd_service:
+    name: confluent-schema-registry
+    state: restarted
+    daemon_reload: true
+  become: true

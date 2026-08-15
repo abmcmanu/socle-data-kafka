@@ -1,0 +1,3 @@
+confluent_version: "8.0"
+schema_registry_port: 8081
+schema_registry_jmx_port: 7073

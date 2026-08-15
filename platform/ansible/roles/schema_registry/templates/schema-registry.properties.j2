@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+listeners=http://0.0.0.0:{{ schema_registry_port }}
+host.name={{ inventory_hostname }}
+kafkastore.bootstrap.servers={% for h in groups['kafka_brokers'] %}{{ 'SASL_SSL' if kafka_security_enabled else 'PLAINTEXT' }}://{{ h }}:9092{{ ',' if not loop.last }}{% endfor %}
+
+kafkastore.topic=_schemas
+schema.compatibility.level=backward_transitive
+# Deux instances : une seule est leader (écritures), l'autre transmet.
+leader.eligibility=true
+{% if kafka_security_enabled %}
+kafkastore.security.protocol=SASL_SSL
+kafkastore.sasl.mechanism=SCRAM-SHA-512
+kafkastore.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="svc-schema-registry" password="{{ vault_schema_registry_password | default('') }}";
+kafkastore.ssl.truststore.location={{ kafka_ssl_truststore }}
+kafkastore.ssl.truststore.password={{ vault_kafka_ssl_truststore_password }}
+{% endif %}

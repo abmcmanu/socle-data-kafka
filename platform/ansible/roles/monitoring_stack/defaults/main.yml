@@ -1,0 +1,5 @@
+monitoring_dir: /opt/socle-monitoring
+prometheus_retention: 30d
+grafana_admin_password: "{{ vault_grafana_admin_password | default('admin') }}"
+alertmanager_smtp_smarthost: ""
+alertmanager_email_to: ""

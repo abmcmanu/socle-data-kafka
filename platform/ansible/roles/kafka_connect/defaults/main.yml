@@ -1,0 +1,12 @@
+connect_group_id: connect-socle
+connect_rest_port: 8083
+connect_jmx_port: 7072
+connect_plugin_dir: /opt/kafka-connect/plugins
+connect_heap_opts: "-Xms2g -Xmx4g"
+connect_plugins:
+  - name: debezium-connector-postgres
+    url: "https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.2.0.Final/debezium-connector-postgres-3.2.0.Final-plugin.tar.gz"
+  - name: confluentinc-kafka-connect-hdfs-10.2.15
+    url: "https://hub-downloads.confluent.io/api/plugins/confluentinc/kafka-connect-hdfs/versions/10.2.15/confluentinc-kafka-connect-hdfs-10.2.15.zip"
+  - name: confluentinc-kafka-connect-avro-converter-8.0.0
+    url: "https://hub-downloads.confluent.io/api/plugins/confluentinc/kafka-connect-avro-converter/versions/8.0.0/confluentinc-kafka-connect-avro-converter-8.0.0.zip"
