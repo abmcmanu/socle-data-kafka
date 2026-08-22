@@ -1,0 +1,118 @@
+# CONTRÔLE DE SANTÉ (PROC-01) : à lancer après toute intervention, et chaque matin par l'exploitation.
+# Sortie : un tableau OK / KO par point de contrôle ; échoue si un point critique est KO.
+- name: Contrôle du cluster Kafka
+  hosts: kafka_brokers[0]
+  become: true
+  gather_facts: false
+  vars:
+    kbs: "{{ inventory_hostname }}:9092"
+    kcfg: /etc/kafka/admin.properties
+  tasks:
+    - name: Quorum KRaft
+      ansible.builtin.command: >-
+        /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} describe --status
+      register: quorum
+      changed_when: false
+      failed_when: false
+
+    - name: Brokers enregistrés
+      ansible.builtin.shell: |
+        set -o pipefail
+        /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} | grep -c 'id:'
+      args: {executable: /bin/bash}
+      register: brokers
+      changed_when: false
+      failed_when: false
+
+    - name: Partitions hors ligne / sous min ISR / sous-répliquées
+      ansible.builtin.shell: |
+        set -o pipefail
+        T=/opt/kafka/bin/kafka-topics.sh
+        echo "offline=$($T --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --unavailable-partitions | wc -l)"
+        echo "underminisr=$($T --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --under-min-isr-partitions | wc -l)"
+        echo "urp=$($T --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --under-replicated-partitions | wc -l)"
+      args: {executable: /bin/bash}
+      register: parts
+      changed_when: false
+
+    - name: Lag des groupes critiques
+      ansible.builtin.shell: |
+        set -o pipefail
+        for g in order-enrichment connect-hdfs-sink; do
+          lag=$(/opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} \
+                --describe --group $g 2>/dev/null | awk 'NR>1 && $6 ~ /^[0-9]+$/ {s+=$6} END {print s+0}')
+          echo "$g=$lag"
+        done
+      args: {executable: /bin/bash}
+      register: lag
+      changed_when: false
+
+    - name: Synthèse
+      ansible.builtin.set_fact:
+        cluster_report:
+          quorum_leader: "{{ 'OK' if quorum.stdout is search('LeaderId:\\s+\\d+') else 'KO' }}"
+          brokers_up: "{{ brokers.stdout | int }} / {{ groups['kafka_brokers'] | length }}"
+          partitions: "{{ parts.stdout_lines | join(', ') }}"
+          consumer_lag: "{{ lag.stdout_lines | join(', ') }}"
+
+    - name: Rapport cluster
+      ansible.builtin.debug:
+        var: cluster_report
+
+    - name: Points critiques
+      ansible.builtin.assert:
+        that:
+          - cluster_report.quorum_leader == 'OK'
+          - brokers.stdout | int == groups['kafka_brokers'] | length
+          - "'offline=0' in parts.stdout"
+          - "'underminisr=0' in parts.stdout"
+        fail_msg: "Socle NON SAIN : voir docs/exploitation/04-runbooks.md"
+        success_msg: "Cluster Kafka sain"
+
+- name: Composants et servitudes
+  hosts: schema_registry:kafka_connect
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Schema Registry répond
+      ansible.builtin.uri: {url: "http://localhost:8081/subjects"}
+      when: inventory_hostname in groups['schema_registry']
+
+    - name: Connecteurs et tâches
+      ansible.builtin.uri:
+        url: "http://localhost:8083/connectors?expand=status"
+        return_content: true
+      register: connectors
+      when: inventory_hostname in groups['kafka_connect']
+
+    - name: Aucun connecteur ni tâche en échec
+      ansible.builtin.assert:
+        that: "'FAILED' not in connectors.content"
+        fail_msg: "Connecteur en échec : runbook RB-08"
+      when: inventory_hostname in groups['kafka_connect']
+
+- name: Servitudes système (toutes les machines)
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Horloge synchronisée (NTP)
+      ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+      register: ntp
+      changed_when: false
+      failed_when: ntp.stdout != 'yes'
+
+    - name: Espace disque des données Kafka < 85 %
+      ansible.builtin.shell: |
+        set -o pipefail
+        df --output=pcent {{ (kafka_log_dirs | default(['/'])) | join(' ') }} 2>/dev/null | tail -n +2 | tr -dc '0-9\n' | sort -n | tail -1
+      args: {executable: /bin/bash}
+      register: disk
+      changed_when: false
+      failed_when: disk.stdout | int >= 85
+
+    - name: Validité du certificat TLS > 21 jours
+      ansible.builtin.command: >-
+        openssl x509 -checkend {{ 21 * 86400 }} -noout -in /etc/kafka/ssl/{{ inventory_hostname }}.crt
+      changed_when: false
+      when: kafka_security_enabled | default(false) and inventory_hostname in groups['kafka_cluster']

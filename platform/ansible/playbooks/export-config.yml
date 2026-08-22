@@ -1,0 +1,47 @@
+# EXPORT DE CONFIGURATION (sauvegarde logique, PROC-07) : topics, configurations dynamiques, ACL,
+# consumer groups, schémas, connecteurs. Archive datée rapatriée sur le poste d'exploitation.
+# Les DONNÉES ne sont pas sauvegardées ainsi : elles sont protégées par la réplication et le PRA.
+- name: Export de la configuration du socle
+  hosts: kafka_brokers[0]
+  become: true
+  gather_facts: true
+  vars:
+    kbs: "{{ inventory_hostname }}:9092"
+    kcfg: /etc/kafka/admin.properties
+    out: "/tmp/socle-config-{{ ansible_date_time.iso8601_basic_short }}"
+  tasks:
+    - name: Répertoire d'export
+      ansible.builtin.file: {path: "{{ out }}", state: directory, mode: "0700"}
+
+    - name: Exports Kafka
+      ansible.builtin.shell: |
+        set -o pipefail
+        K=/opt/kafka/bin
+        $K/kafka-topics.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe > {{ out }}/topics.txt
+        $K/kafka-configs.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --all --entity-type brokers > {{ out }}/broker-configs.txt
+        $K/kafka-configs.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --entity-type topics > {{ out }}/topic-configs.txt
+        $K/kafka-acls.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --list > {{ out }}/acls.txt || true
+        $K/kafka-consumer-groups.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} --describe --all-groups > {{ out }}/groups.txt
+        $K/kafka-metadata-quorum.sh --bootstrap-server {{ kbs }} --command-config {{ kcfg }} describe --status > {{ out }}/quorum.txt
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Schémas et connecteurs
+      ansible.builtin.shell: |
+        SR=http://{{ groups['schema_registry'][0] }}:8081
+        KC=http://{{ groups['kafka_connect'][0] }}:8083
+        curl -fs "$SR/schemas?deleted=false" > {{ out }}/schemas.json
+        curl -fs "$KC/connectors?expand=info&expand=status" > {{ out }}/connectors.json
+      changed_when: true
+
+    - name: Archive
+      community.general.archive:
+        path: "{{ out }}"
+        dest: "{{ out }}.tar.gz"
+        mode: "0600"
+
+    - name: Rapatrier l'archive
+      ansible.builtin.fetch:
+        src: "{{ out }}.tar.gz"
+        dest: "{{ playbook_dir }}/../exports/"
+        flat: true

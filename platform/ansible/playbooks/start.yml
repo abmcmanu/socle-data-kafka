@@ -1,0 +1,111 @@
+# PROCÉDURE DE RELANCE COMPLÈTE DU SOCLE (PROC-03). Ordre inverse de l'arrêt, avec un contrôle à chaque étape.
+- name: "1. Contrôleurs KRaft (tous ensemble : il faut une majorité pour élire un leader)"
+  hosts: kafka_controllers
+  become: true
+  tasks:
+    - name: Démarrage
+      ansible.builtin.systemd_service:
+        name: kafka
+        state: started
+    - name: Port contrôleur ouvert
+      ansible.builtin.wait_for:
+        port: 9093
+        timeout: 120
+
+- name: Contrôle du quorum
+  hosts: kafka_controllers[0]
+  become: true
+  tasks:
+    - name: Un leader est élu
+      ansible.builtin.command: >-
+        /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-controller {{ inventory_hostname }}:9093
+        --command-config /etc/kafka/admin.properties describe --status
+      register: quorum
+      changed_when: false
+      until: quorum.rc == 0 and quorum.stdout is search('LeaderId:\\s+\\d+')
+      retries: 20
+      delay: 6
+
+- name: 2. Brokers
+  hosts: kafka_brokers
+  become: true
+  tasks:
+    - name: Démarrage
+      ansible.builtin.systemd_service:
+        name: kafka
+        state: started
+    - name: Port client ouvert
+      ansible.builtin.wait_for:
+        port: 9092
+        timeout: 300
+
+- name: Contrôle de la réplication avant de laisser revenir les clients
+  hosts: kafka_brokers[0]
+  become: true
+  tasks:
+    - name: Aucune partition hors ligne ni sous-répliquée
+      ansible.builtin.shell: |
+        set -o pipefail
+        B={{ inventory_hostname }}:9092; C=/etc/kafka/admin.properties
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $B --command-config $C --describe --unavailable-partitions | wc -l
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $B --command-config $C --describe --under-replicated-partitions | wc -l
+      args: {executable: /bin/bash}
+      register: repl
+      changed_when: false
+      until: repl.stdout_lines | map('int') | sum == 0
+      retries: 60
+      delay: 10
+
+- name: 3. Schema Registry
+  hosts: schema_registry
+  become: true
+  tasks:
+    - name: Démarrage
+      ansible.builtin.systemd_service:
+        name: confluent-schema-registry
+        state: started
+    - name: API disponible
+      ansible.builtin.uri:
+        url: http://localhost:8081/subjects
+      register: sr
+      until: sr.status == 200
+      retries: 30
+      delay: 5
+
+- name: 4. Kafka Connect
+  hosts: kafka_connect
+  become: true
+  tasks:
+    - name: Démarrage
+      ansible.builtin.systemd_service:
+        name: kafka-connect
+        state: started
+    - name: API disponible
+      ansible.builtin.uri:
+        url: http://localhost:8083/connectors
+      register: kc
+      until: kc.status == 200
+      retries: 30
+      delay: 5
+    - name: Reprendre les connecteurs mis en pause par stop.yml
+      ansible.builtin.shell: |
+        set -o pipefail
+        for c in $(curl -fs http://localhost:8083/connectors | jq -r '.[]'); do
+          curl -fs -X PUT "http://localhost:8083/connectors/$c/resume"
+        done
+      args: {executable: /bin/bash}
+      run_once: true
+      changed_when: true
+
+- name: 5. Applications
+  hosts: socle_apps
+  become: true
+  tasks:
+    - name: Démarrage
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ socle_app_units | default(['order-enrichment', 'ingestion-api']) }}"
+
+- name: 6. Contrôle de santé complet
+  import_playbook: healthcheck.yml

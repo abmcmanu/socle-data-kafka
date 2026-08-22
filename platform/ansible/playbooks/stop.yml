@@ -1,0 +1,113 @@
+# PROCÉDURE D'ARRÊT COMPLET DU SOCLE (docs/exploitation/02-procedures-arret-relance.md, PROC-02).
+#   ansible-playbook -i inventories/prod/hosts.yml playbooks/stop.yml --ask-vault-pass
+# Ordre : des consommateurs vers le cœur, pour ne rien laisser écrire pendant l'arrêt.
+#   1. applications  2. Kafka Connect  3. Schema Registry  4. brokers (1 par 1)  5. contrôleurs (leader en dernier)
+- name: Confirmation
+  hosts: localhost
+  gather_facts: false
+  vars_prompt:
+    - name: confirm
+      prompt: "Arrêt COMPLET du socle {{ socle_env | default('') }} : taper ARRET pour confirmer"
+      private: false
+  tasks:
+    - name: Vérifier la confirmation
+      ansible.builtin.assert:
+        that: confirm == "ARRET"
+        fail_msg: "Arrêt annulé."
+
+- name: 1. Applications du socle (ingestion-api, order-enrichment)
+  hosts: socle_apps
+  become: true
+  tasks:
+    - name: "Arrêt propre (SIGTERM : transactions terminées, groupe quitté)"
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ socle_app_units | default(['ingestion-api', 'order-enrichment']) }}"
+
+- name: 2. Kafka Connect
+  hosts: kafka_connect
+  become: true
+  tasks:
+    - name: Mettre les connecteurs en pause (les offsets sont conservés)
+      ansible.builtin.shell: |
+        set -o pipefail
+        for c in $(curl -fs http://localhost:8083/connectors | jq -r '.[]'); do
+          curl -fs -X PUT "http://localhost:8083/connectors/$c/pause"
+        done
+      args: {executable: /bin/bash}
+      run_once: true
+      changed_when: true
+      failed_when: false
+
+    - name: Arrêt des workers
+      ansible.builtin.systemd_service:
+        name: kafka-connect
+        state: stopped
+
+- name: 3. Schema Registry
+  hosts: schema_registry
+  become: true
+  tasks:
+    - name: Arrêt
+      ansible.builtin.systemd_service:
+        name: confluent-schema-registry
+        state: stopped
+
+- name: "4. Brokers, un par un (arrêt contrôlé : transfert des leaderships)"
+  hosts: kafka_brokers
+  serial: 1
+  become: true
+  tasks:
+    - name: Arrêt du broker
+      ansible.builtin.systemd_service:
+        name: kafka
+        state: stopped
+    - name: Vérifier que le processus est terminé
+      ansible.builtin.wait_for:
+        port: 9092
+        state: stopped
+        timeout: 300
+
+- name: Identifier le contrôleur actif (leader du quorum)
+  hosts: kafka_controllers[0]
+  become: true
+  tasks:
+    - name: Statut du quorum
+      ansible.builtin.command: >-
+        /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-controller {{ inventory_hostname }}:9093
+        --command-config /etc/kafka/admin.properties describe --status
+      register: quorum
+      changed_when: false
+      failed_when: false
+    - name: Mémoriser le leader
+      ansible.builtin.set_fact:
+        kraft_leader_id: "{{ (quorum.stdout | regex_search('LeaderId:\\s+(\\d+)', '\\1') or ['none']) | first }}"
+
+- name: 5a. Contrôleurs suiveurs
+  hosts: kafka_controllers
+  serial: 1
+  become: true
+  tasks:
+    - name: Arrêt d'un contrôleur suiveur
+      ansible.builtin.systemd_service:
+        name: kafka
+        state: stopped
+      when: kafka_node_id | string != hostvars[groups['kafka_controllers'][0]].kraft_leader_id | string
+
+- name: 5b. Contrôleur leader, en dernier
+  hosts: kafka_controllers
+  become: true
+  tasks:
+    - name: Arrêt du dernier contrôleur
+      ansible.builtin.systemd_service:
+        name: kafka
+        state: stopped
+
+- name: Compte rendu
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Fin
+      ansible.builtin.debug:
+        msg: "Socle arrêté. La supervision reste active : les alertes de disponibilité sont attendues (mettre une maintenance dans Alertmanager)."

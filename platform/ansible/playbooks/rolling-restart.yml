@@ -1,0 +1,99 @@
+# REDÉMARRAGE ROULANT (PROC-04) : appliquer une configuration, un correctif OS ou une montée de version
+# sans interruption de service. Un nœud à la fois ; on n'avance que si la réplication est revenue à 100 %.
+#   ansible-playbook playbooks/rolling-restart.yml                       # tout le cluster
+#   ansible-playbook playbooks/rolling-restart.yml --limit kafka_brokers # brokers seulement
+- name: Pré-contrôle — le cluster doit être sain avant de commencer
+  hosts: kafka_brokers[0]
+  become: true
+  any_errors_fatal: true
+  tasks:
+    - name: Aucune partition sous-répliquée ni hors ligne
+      ansible.builtin.shell: &check_replication |
+        set -o pipefail
+        B={{ groups['kafka_brokers'][0] }}:9092; C=/etc/kafka/admin.properties
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $B --command-config $C --describe --under-replicated-partitions | wc -l
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $B --command-config $C --describe --unavailable-partitions | wc -l
+      args: {executable: /bin/bash}
+      register: pre
+      changed_when: false
+      failed_when: pre.stdout_lines | map('int') | sum > 0
+
+- name: Identifier le leader du quorum KRaft
+  hosts: kafka_controllers[0]
+  become: true
+  tasks:
+    - name: Statut du quorum
+      ansible.builtin.command: >-
+        /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-controller {{ inventory_hostname }}:9093
+        --command-config /etc/kafka/admin.properties describe --status
+      register: quorum
+      changed_when: false
+    - name: Mémoriser le leader
+      ansible.builtin.set_fact:
+        kraft_leader_id: "{{ (quorum.stdout | regex_search('LeaderId:\\s+(\\d+)', '\\1') or ['none']) | first }}"
+
+- name: Contrôleurs suiveurs, un par un
+  hosts: kafka_controllers
+  serial: 1
+  max_fail_percentage: 0
+  become: true
+  tasks:
+    - name: Redémarrage d'un suiveur
+      when: kafka_node_id | string != hostvars[groups['kafka_controllers'][0]].kraft_leader_id | string
+      block:
+        - name: Redémarrer
+          ansible.builtin.systemd_service: {name: kafka, state: restarted}
+        - name: Port contrôleur ouvert
+          ansible.builtin.wait_for: {port: 9093, timeout: 120}
+        - name: Le quorum a toujours un leader
+          ansible.builtin.command: >-
+            /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-controller {{ inventory_hostname }}:9093
+            --command-config /etc/kafka/admin.properties describe --status
+          register: quorum_check
+          changed_when: false
+          until: quorum_check.rc == 0 and quorum_check.stdout is search('LeaderId:\\s+\\d+')
+          retries: 20
+          delay: 5
+
+- name: Contrôleur leader en dernier (une seule réélection)
+  hosts: kafka_controllers
+  become: true
+  tasks:
+    - name: Redémarrage du leader
+      when: kafka_node_id | string == hostvars[groups['kafka_controllers'][0]].kraft_leader_id | string
+      block:
+        - name: Redémarrer
+          ansible.builtin.systemd_service: {name: kafka, state: restarted}
+        - name: Port contrôleur ouvert
+          ansible.builtin.wait_for: {port: 9093, timeout: 120}
+
+- name: Brokers, un par un
+  hosts: kafka_brokers
+  serial: 1
+  max_fail_percentage: 0
+  become: true
+  tasks:
+    - name: Redémarrer (arrêt contrôlé puis démarrage)
+      ansible.builtin.systemd_service: {name: kafka, state: restarted}
+    - name: Port client ouvert
+      ansible.builtin.wait_for: {port: 9092, timeout: 300}
+    - name: Attendre le retour complet de la réplication avant le broker suivant
+      ansible.builtin.shell: *check_replication
+      args: {executable: /bin/bash}
+      register: post
+      changed_when: false
+      until: post.stdout_lines | map('int') | sum == 0
+      retries: 90
+      delay: 10
+
+- name: Rééquilibrer les leaders (preferred leader election)
+  hosts: kafka_brokers[0]
+  become: true
+  tasks:
+    - name: Élection du leader préféré sur toutes les partitions
+      ansible.builtin.command: >-
+        /opt/kafka/bin/kafka-leader-election.sh --bootstrap-server {{ inventory_hostname }}:9092
+        --admin.config /etc/kafka/admin.properties --election-type PREFERRED --all-topic-partitions
+      register: election
+      changed_when: "'Successfully' in election.stdout"
+      failed_when: election.rc != 0 and 'ElectionNotNeeded' not in (election.stderr + election.stdout)
