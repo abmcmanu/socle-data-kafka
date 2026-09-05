@@ -1,0 +1,30 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: svc-connect
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      # Topics internes du worker
+      - resource: {type: topic, name: _platform.connect., patternType: prefix}
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource: {type: group, name: connect-socle, patternType: literal}
+        operations: [Read, Describe]
+      # Source CDC
+      - resource: {type: topic, name: crm.cdc., patternType: prefix}
+        operations: [Write, Describe]
+      # Sink HDFS : lecture des topics déposés, groupe connect-<connecteur>, DLQ
+      - resource: {type: topic, name: orders.evt.order-enriched.v1, patternType: literal}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: analytics.agg.revenue-by-country-1m.v1, patternType: literal}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: crm.cdc.customers.v1, patternType: literal}
+        operations: [Read]
+      - resource: {type: group, name: connect-, patternType: prefix}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: platform.dlq., patternType: prefix}
+        operations: [Write, Describe]

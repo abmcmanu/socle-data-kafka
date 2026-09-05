@@ -1,0 +1,60 @@
+# Cluster Kafka du socle géré par l'opérateur Strimzi (≥ 0.49, mode KRaft uniquement).
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: socle
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    # Aligner sur une version supportée par la version installée de l'opérateur.
+    version: 4.1.0
+    listeners:
+      # Applications dans le cluster Kubernetes : mTLS (KafkaUser type tls).
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+        authentication:
+          type: tls
+      # Clients hors Kubernetes (VM, Hadoop) : SCRAM-SHA-512 sur TLS.
+      - name: external
+        port: 9094
+        type: loadbalancer
+        tls: true
+        authentication:
+          type: scram-sha-512
+    authorization:
+      type: simple
+      superUsers: [CN=admin]
+    rack:
+      topologyKey: topology.kubernetes.io/zone
+    config:
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      unclean.leader.election.enable: false
+      auto.create.topics.enable: false
+      num.partitions: 3
+      replica.selector.class: org.apache.kafka.common.replica.RackAwareReplicaSelector
+      group.initial.rebalance.delay.ms: 3000
+    metricsConfig:
+      type: jmxPrometheusExporter
+      valueFrom:
+        configMapKeyRef:
+          name: socle-kafka-metrics
+          key: kafka-metrics-config.yml
+  entityOperator:
+    # Topic Operator : applique les KafkaTopic générés depuis governance/topics/catalog.yaml.
+    topicOperator: {}
+    # User Operator : crée certificats / mots de passe et ACL des KafkaUser.
+    userOperator: {}
+  # Lag des consumer groups (kafka_consumergroup_lag) pour les alertes et tableaux de bord.
+  kafkaExporter:
+    topicRegex: ".*"
+    groupRegex: ".*"
+  # Rééquilibrage automatique des partitions (ajout/retrait de brokers) via KafkaRebalance.
+  cruiseControl: {}

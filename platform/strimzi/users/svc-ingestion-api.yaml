@@ -1,0 +1,16 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: svc-ingestion-api
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource: {type: topic, name: orders.evt.order-placed.v1, patternType: literal}
+        operations: [Write, Describe]
+  # Protège le cluster d'un client emballé : 20 Mo/s en écriture au maximum.
+  quotas:
+    producerByteRate: 20971520

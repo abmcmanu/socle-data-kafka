@@ -1,0 +1,18 @@
+# Lecture seule des métadonnées pour la supervision (outils externes au cluster).
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: svc-monitoring
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource: {type: topic, name: "*", patternType: literal}
+        operations: [Describe, DescribeConfigs]
+      - resource: {type: group, name: "*", patternType: literal}
+        operations: [Describe]
+      - resource: {type: cluster}
+        operations: [Describe]

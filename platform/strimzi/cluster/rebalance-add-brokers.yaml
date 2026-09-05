@@ -1,0 +1,12 @@
+# Exemple MNT-03 : après passage du pool « brokers » de 3 à 4 réplicas, déplacer des partitions
+# vers le nouveau broker. Cruise Control calcule une proposition ; l'approuver avec :
+#   kubectl annotate kafkarebalance add-brokers strimzi.io/rebalance=approve -n socle-data
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaRebalance
+metadata:
+  name: add-brokers
+  labels:
+    strimzi.io/cluster: socle
+spec:
+  mode: add-brokers
+  brokers: [6]          # identifiants : contrôleurs 0-2, brokers 3-5, nouveau broker 6

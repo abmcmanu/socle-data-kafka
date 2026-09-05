@@ -1,0 +1,30 @@
+# Kafka Streams en exactly-once : lecture, écriture, topics internes, groupe et TransactionalId.
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: svc-order-enrichment
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource: {type: topic, name: orders.evt.order-placed.v1, patternType: literal}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: crm.cdc.customers.v1, patternType: literal}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: orders.evt.order-enriched.v1, patternType: literal}
+        operations: [Write, Describe]
+      - resource: {type: topic, name: analytics.agg.revenue-by-country-1m.v1, patternType: literal}
+        operations: [Write, Describe]
+      - resource: {type: topic, name: orders.dlq.order-placed.v1, patternType: literal}
+        operations: [Write, Describe]
+      # Topics internes : order-enrichment-<nom>-repartition / -changelog
+      - resource: {type: topic, name: order-enrichment-, patternType: prefix}
+        operations: [Create, Read, Write, Describe, DescribeConfigs, Delete]
+      - resource: {type: group, name: order-enrichment, patternType: prefix}
+        operations: [Read, Describe]
+      # Exactly-once : un TransactionalId par thread, préfixé par l'application.id
+      - resource: {type: transactionalId, name: order-enrichment, patternType: prefix}
+        operations: [Write, Describe]

@@ -1,0 +1,66 @@
+# Pools de nœuds KRaft : contrôleurs et brokers séparés (ADR 0001).
+# Les ressources CPU/mémoire se déclarent ici (déprécié dans Kafka.spec.kafka depuis Strimzi 0.49).
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: controllers
+  labels:
+    strimzi.io/cluster: socle
+spec:
+  replicas: 3
+  roles: [controller]
+  resources:
+    requests: {cpu: "1", memory: 4Gi}
+    limits: {memory: 4Gi}
+  jvmOptions:
+    -Xms: 2g
+    -Xmx: 2g
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 50Gi
+        class: ssd
+        kraftMetadata: shared
+        deleteClaim: false        # supprimer le cluster ne supprime JAMAIS les données
+  template:
+    pod:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels: {strimzi.io/pool-name: controllers}
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: brokers
+  labels:
+    strimzi.io/cluster: socle
+spec:
+  replicas: 3
+  roles: [broker]
+  resources:
+    requests: {cpu: "4", memory: 32Gi}
+    limits: {memory: 32Gi}
+  jvmOptions:
+    -Xms: 6g
+    -Xmx: 6g                      # le reste de la mémoire sert de page cache
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 2Ti
+        class: ssd
+        deleteClaim: false
+  template:
+    pod:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels: {strimzi.io/pool-name: brokers}

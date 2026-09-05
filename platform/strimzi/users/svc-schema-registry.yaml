@@ -1,0 +1,17 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: svc-schema-registry
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource: {type: topic, name: _schemas, patternType: literal}
+        operations: [Read, Write, Describe, DescribeConfigs, Create]
+      - resource: {type: group, name: schema-registry, patternType: prefix}
+        operations: [Read, Describe]
+      - resource: {type: topic, name: __consumer_offsets, patternType: literal}
+        operations: [Describe]

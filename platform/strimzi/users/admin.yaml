@@ -1,0 +1,9 @@
+# Administrateur (super-utilisateur CN=admin) : réservé aux opérations d'exploitation.
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: admin
+  labels: {strimzi.io/cluster: socle}
+spec:
+  authentication:
+    type: tls
