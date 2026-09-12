@@ -1,0 +1,14 @@
+# Déploiement complet : kubectl apply -k platform/strimzi
+# Prérequis : opérateur Strimzi ≥ 0.49 installé et surveillant le namespace socle-data,
+# Prometheus Operator (kube-prometheus-stack) pour la supervision.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: socle-data
+resources:
+  - 00-namespace.yaml
+  - monitoring
+  - cluster
+  - topics
+  - users
+  - schema-registry
+  - connect

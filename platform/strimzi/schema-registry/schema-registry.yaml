@@ -1,0 +1,72 @@
+# Schema Registry (hors périmètre Strimzi) : 2 instances, une seule leader pour les écritures.
+# S'authentifie au cluster en mTLS avec les certificats générés par le User Operator.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+  labels: {app: schema-registry}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: schema-registry}
+  template:
+    metadata:
+      labels: {app: schema-registry}
+    spec:
+      containers:
+        - name: schema-registry
+          image: confluentinc/cp-schema-registry:8.0.0
+          ports:
+            - {name: http, containerPort: 8081}
+          env:
+            - name: SCHEMA_REGISTRY_HOST_NAME
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: SCHEMA_REGISTRY_LISTENERS, value: "http://0.0.0.0:8081"}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS, value: "SSL://socle-kafka-bootstrap:9093"}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL, value: SSL}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_TYPE, value: PKCS12}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_LOCATION, value: /mnt/user/user.p12}
+            - name: SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_PASSWORD
+              valueFrom: {secretKeyRef: {name: svc-schema-registry, key: user.password}}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_TYPE, value: PKCS12}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_LOCATION, value: /mnt/ca/ca.p12}
+            - name: SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_PASSWORD
+              valueFrom: {secretKeyRef: {name: socle-cluster-ca-cert, key: ca.password}}
+            - {name: SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL, value: backward_transitive}
+            - {name: SCHEMA_REGISTRY_KAFKASTORE_GROUP_ID, value: schema-registry}
+          readinessProbe:
+            httpGet: {path: /subjects, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 250m, memory: 1Gi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - {name: user, mountPath: /mnt/user, readOnly: true}
+            - {name: ca, mountPath: /mnt/ca, readOnly: true}
+      volumes:
+        - name: user
+          secret: {secretName: svc-schema-registry}
+        - name: ca
+          secret: {secretName: socle-cluster-ca-cert}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: schema-registry
+spec:
+  selector: {app: schema-registry}
+  ports:
+    - {name: http, port: 8081, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: schema-registry
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app: schema-registry}

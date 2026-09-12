@@ -1,0 +1,110 @@
+# Cluster Kafka Connect géré par Strimzi. L'opérateur construit l'image avec les plugins listés
+# (mêmes plugins que connectors/Dockerfile) et la pousse dans le registre interne.
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: socle-connect
+  annotations:
+    # Les connecteurs sont déclarés par des ressources KafkaConnector (GitOps), pas par l'API REST.
+    strimzi.io/use-connector-resources: "true"
+spec:
+  version: 4.1.0
+  replicas: 2
+  bootstrapServers: socle-kafka-bootstrap:9093
+  # Champs dédiés (Strimzi ≥ 0.49) plutôt que group.id / *.storage.topic dans config.
+  groupId: connect-socle
+  configStorageTopic: _platform.connect.configs
+  offsetStorageTopic: _platform.connect.offsets
+  statusStorageTopic: _platform.connect.status
+  tls:
+    trustedCertificates:
+      - secretName: socle-cluster-ca-cert
+        pattern: "*.crt"
+  authentication:
+    type: tls
+    certificateAndKey:
+      secretName: svc-connect
+      certificate: user.crt
+      key: user.key
+  config:
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: io.confluent.connect.avro.AvroConverter
+    value.converter.schema.registry.url: http://schema-registry.socle-data.svc:8081
+    config.storage.replication.factor: -1
+    offset.storage.replication.factor: -1
+    status.storage.replication.factor: -1
+    connector.client.config.override.policy: All
+    # Secrets Kubernetes lus par les connecteurs : ${secrets:socle-data/crm-debezium:password}
+    config.providers: secrets
+    config.providers.secrets.class: io.strimzi.kafka.KubernetesSecretConfigProvider
+  resources:
+    requests: {cpu: "1", memory: 4Gi}
+    limits: {memory: 4Gi}
+  jvmOptions:
+    -Xms: 2g
+    -Xmx: 3g
+    # Kerberos du data lake (servitude S-07) : krb5.conf et keytab montés sous /mnt.
+    javaSystemProperties:
+      - name: java.security.krb5.conf
+        value: /mnt/krb5/krb5.conf
+  rack:
+    topologyKey: topology.kubernetes.io/zone
+  template:
+    pod:
+      volumes:
+        - name: hdfs-keytab
+          secret: {secretName: hdfs-keytab}
+        - name: krb5
+          configMap: {name: krb5-datalake}
+    connectContainer:
+      volumeMounts:
+        - {name: hdfs-keytab, mountPath: /mnt/hdfs-keytab, readOnly: true}
+        - {name: krb5, mountPath: /mnt/krb5, readOnly: true}
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: socle-kafka-metrics
+        key: connect-metrics-config.yml
+  build:
+    output:
+      type: docker
+      image: registry.interne/socle/kafka-connect:1.0.0
+      pushSecret: registry-push-credentials
+    plugins:
+      - name: debezium-connector-postgres
+        artifacts:
+          - type: tgz
+            url: https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.2.0.Final/debezium-connector-postgres-3.2.0.Final-plugin.tar.gz
+      - name: kafka-connect-hdfs
+        artifacts:
+          - type: zip
+            url: https://hub-downloads.confluent.io/api/plugins/confluentinc/kafka-connect-hdfs/versions/10.2.15/confluentinc-kafka-connect-hdfs-10.2.15.zip
+      - name: kafka-connect-avro-converter
+        artifacts:
+          - type: zip
+            url: https://hub-downloads.confluent.io/api/plugins/confluentinc/kafka-connect-avro-converter/versions/8.0.0/confluentinc-kafka-connect-avro-converter-8.0.0.zip
+---
+# Le KubernetesSecretConfigProvider lit les Secrets avec le compte de service de Connect.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: connect-secrets-reader
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [crm-debezium]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: connect-secrets-reader
+subjects:
+  - kind: ServiceAccount
+    name: socle-connect-connect
+    namespace: socle-data
+roleRef:
+  kind: Role
+  name: connect-secrets-reader
+  apiGroup: rbac.authorization.k8s.io
