@@ -1,0 +1,64 @@
+# Collecte Prometheus (Prometheus Operator / kube-prometheus-stack).
+# Les relabelings donnent aux séries les mêmes labels `job` et `instance` qu'en VM et dans le lab :
+# les règles d'alerte et tableaux de bord de monitoring/ fonctionnent donc sans modification.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-brokers
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/cluster: socle
+      strimzi.io/broker-role: "true"
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      relabelings: &relabel
+        - {targetLabel: job, replacement: kafka-brokers}
+        - {sourceLabels: [__meta_kubernetes_pod_name], targetLabel: instance}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-controllers
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/cluster: socle
+      strimzi.io/controller-role: "true"
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      relabelings:
+        - {targetLabel: job, replacement: kafka-controllers}
+        - {sourceLabels: [__meta_kubernetes_pod_name], targetLabel: instance}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-connect
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/cluster: socle-connect
+      strimzi.io/kind: KafkaConnect
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      relabelings:
+        - {targetLabel: job, replacement: kafka-connect}
+        - {sourceLabels: [__meta_kubernetes_pod_name], targetLabel: instance}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-exporter
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/name: socle-kafka-exporter
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      relabelings:
+        - {targetLabel: job, replacement: kafka-exporter}

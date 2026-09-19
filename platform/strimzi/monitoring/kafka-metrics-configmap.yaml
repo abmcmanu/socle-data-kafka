@@ -1,0 +1,150 @@
+# FICHIER GÉNÉRÉ par tools/sync_strimzi_monitoring.py à partir de monitoring/. Ne pas modifier.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: socle-kafka-metrics
+  labels:
+    app.kubernetes.io/part-of: socle-data
+data:
+  kafka-metrics-config.yml: |
+    # Règles Prometheus JMX Exporter pour les brokers et contrôleurs Kafka (KRaft).
+    # Utilisé tel quel par le lab Docker et Ansible ; copié dans la ConfigMap Strimzi par
+    # tools/sync_strimzi_monitoring.py (la CI vérifie la synchronisation).
+    # Les noms produits (kafka_server_replicamanager_underreplicatedpartitions, ...) sont ceux
+    # utilisés par les tableaux de bord et les alertes de monitoring/.
+    lowercaseOutputName: true
+    lowercaseOutputLabelNames: true
+    rules:
+      # Ratios d'inactivité des threads (Meter : on prend le taux sur 1 minute, entre 0 et 1).
+      - pattern: kafka.server<type=KafkaRequestHandlerPool, name=RequestHandlerAvgIdlePercent><>OneMinuteRate
+        name: kafka_server_kafkarequesthandlerpool_requesthandleravgidlepercent
+        type: GAUGE
+      - pattern: kafka.network<type=SocketServer, name=NetworkProcessorAvgIdlePercent><>Value
+        name: kafka_network_socketserver_networkprocessoravgidlepercent
+        type: GAUGE
+
+      # Latences des requêtes par type et par percentile.
+      - pattern: kafka.network<type=RequestMetrics, name=(.+), request=(Produce|FetchConsumer|FetchFollower)><>(\d+)thPercentile
+        name: kafka_network_requestmetrics_$1
+        type: GAUGE
+        labels:
+          request: "$2"
+          quantile: "0.$3"
+      - pattern: kafka.network<type=RequestMetrics, name=RequestsPerSec, request=(.+), version=(.+)><>Count
+        name: kafka_network_requestmetrics_requests_total
+        type: COUNTER
+        labels:
+          request: "$1"
+      - pattern: kafka.network<type=RequestChannel, name=RequestQueueSize><>Value
+        name: kafka_network_requestchannel_requestqueuesize
+        type: GAUGE
+
+      # Débits par topic (Meter -> compteur, on calcule rate() dans Prometheus).
+      - pattern: kafka.server<type=BrokerTopicMetrics, name=(.+)PerSec, topic=(.+)><>Count
+        name: kafka_server_brokertopicmetrics_$1_total
+        type: COUNTER
+        labels:
+          topic: "$2"
+      - pattern: kafka.server<type=BrokerTopicMetrics, name=(.+)PerSec><>Count
+        name: kafka_server_brokertopicmetrics_$1_total
+        type: COUNTER
+
+      # Compteurs d'événements (ISR shrinks/expands, élections...).
+      - pattern: kafka.server<type=(.+), name=(.+)PerSec\w*><>Count
+        name: kafka_server_$1_$2_total
+        type: COUNTER
+      - pattern: kafka.controller<type=(.+), name=(.+)PerSec\w*><>Count
+        name: kafka_controller_$1_$2_total
+        type: COUNTER
+
+      # Jauges génériques : UnderReplicatedPartitions, UnderMinIsrPartitionCount, PartitionCount,
+      # LeaderCount, OfflinePartitionsCount, ActiveControllerCount, GlobalPartitionCount...
+      - pattern: kafka.server<type=(.+), name=(.+)><>(Value|Count)
+        name: kafka_server_$1_$2
+        type: GAUGE
+      - pattern: kafka.controller<type=(.+), name=(.+)><>(Value|Count)
+        name: kafka_controller_$1_$2
+        type: GAUGE
+
+      # Taille des partitions sur disque.
+      - pattern: kafka.log<type=Log, name=Size, topic=(.+), partition=(.+)><>Value
+        name: kafka_log_log_size
+        type: GAUGE
+        labels:
+          topic: "$1"
+          partition: "$2"
+
+      # Quorum KRaft (contrôleurs et brokers suivent __cluster_metadata).
+      - pattern: 'kafka.server<type=raft-metrics><>(.+):'
+        name: kafka_server_raft_metrics_$1
+        type: GAUGE
+      - pattern: 'kafka.server<type=(broker-metadata-metrics|controller-metadata-metrics)><>(.+):'
+        name: kafka_server_$1_$2
+        type: GAUGE
+
+      # Temps de throttling des quotas.
+      - pattern: kafka.server<type=(Produce|Fetch|Request), user=(.*), client-id=(.*)><>throttle-time
+        name: kafka_server_quota_throttle_time_ms
+        type: GAUGE
+        labels:
+          quota: "$1"
+          user: "$2"
+          client_id: "$3"
+  connect-metrics-config.yml: |
+    # Règles JMX Exporter pour Kafka Connect (workers, connecteurs, tâches, erreurs).
+    lowercaseOutputName: true
+    lowercaseOutputLabelNames: true
+    rules:
+      # État des connecteurs et des tâches : l'attribut est une chaîne ("running", "failed"...).
+      # On produit une série par état avec la valeur 1.
+      - pattern: 'kafka.connect<type=connector-metrics, connector=(.+)><>status: ([a-z-]+)'
+        name: kafka_connect_connector_status
+        value: 1
+        type: GAUGE
+        labels:
+          connector: "$1"
+          status: "$2"
+      - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>status: ([a-z-]+)'
+        name: kafka_connect_connector_task_status
+        value: 1
+        type: GAUGE
+        labels:
+          connector: "$1"
+          task: "$2"
+          status: "$3"
+
+      # Erreurs et DLQ par tâche.
+      - pattern: kafka.connect<type=task-error-metrics, connector=(.+), task=(.+)><>(total-record-errors|total-record-failures|deadletterqueue-produce-requests|total-errors-logged)
+        name: kafka_connect_task_error_$3
+        type: GAUGE
+        labels:
+          connector: "$1"
+          task: "$2"
+
+      # Débits source / sink.
+      - pattern: kafka.connect<type=(source|sink)-task-metrics, connector=(.+), task=(.+)><>([a-z-]+)
+        name: kafka_connect_$1_task_$4
+        type: GAUGE
+        labels:
+          connector: "$2"
+          task: "$3"
+
+      # Métriques du worker (nombre de connecteurs, tâches en échec, rebalances).
+      - pattern: kafka.connect<type=connect-worker-metrics><>([a-z-]+)
+        name: kafka_connect_worker_$1
+        type: GAUGE
+      - pattern: kafka.connect<type=connect-worker-rebalance-metrics><>([a-z-]+)
+        name: kafka_connect_worker_rebalance_$1
+        type: GAUGE
+
+      # Clients Kafka embarqués (lag des connecteurs sink, erreurs des producers source).
+      - pattern: kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+)><>records-lag-max
+        name: kafka_connect_consumer_records_lag_max
+        type: GAUGE
+        labels:
+          client_id: "$1"
+      - pattern: kafka.producer<type=producer-metrics, client-id=(.+)><>(record-error-rate|record-send-rate|request-latency-avg)
+        name: kafka_connect_producer_$2
+        type: GAUGE
+        labels:
+          client_id: "$1"

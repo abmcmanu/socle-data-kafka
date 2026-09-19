@@ -1,0 +1,310 @@
+# FICHIER GÉNÉRÉ par tools/sync_strimzi_monitoring.py à partir de monitoring/. Ne pas modifier.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: socle-kafka-alerts
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: kafka-cluster
+    rules:
+    - alert: KafkaBrokerDown
+      expr: up{job="kafka-brokers"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Broker {{ $labels.instance }} injoignable
+        description: Le broker ne répond plus aux collectes depuis 1 minute. Les partitions dont il était leader basculent ; vérifier qu'aucune n'est hors ligne.
+        runbook: docs/exploitation/04-runbooks.md#rb-01--broker-indisponible
+    - alert: KafkaControllerDown
+      expr: up{job="kafka-controllers"} == 0
+      for: 2m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Contrôleur KRaft {{ $labels.instance }} injoignable
+        description: Le quorum fonctionne encore (2 sur 3) mais ne tolère plus aucune autre perte.
+        runbook: docs/exploitation/04-runbooks.md#rb-02--quorum-kraft
+    - alert: KafkaControllerQuorumAtRisk
+      expr: count(up{job="kafka-controllers"} == 1) < 2
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: 'Quorum KRaft perdu : moins de 2 contrôleurs sur 3'
+        description: Plus aucune modification de métadonnées possible (élections, création de topics).
+        runbook: docs/exploitation/04-runbooks.md#rb-02--quorum-kraft
+    - alert: KafkaNoActiveController
+      expr: sum(kafka_controller_kafkacontroller_activecontrollercount) != 1
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: '{{ $value }} contrôleur(s) actif(s) au lieu de 1'
+        description: 'Aucun ou plusieurs contrôleurs actifs : élection bloquée ou partition réseau.'
+        runbook: docs/exploitation/04-runbooks.md#rb-02--quorum-kraft
+    - alert: KafkaOfflinePartitions
+      expr: sum(kafka_controller_kafkacontroller_offlinepartitionscount) > 0
+      for: 0m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: '{{ $value }} partition(s) hors ligne'
+        description: 'Des partitions n''ont plus de leader : lectures et écritures impossibles sur ces partitions.'
+        runbook: docs/exploitation/04-runbooks.md#rb-03--partitions-hors-ligne
+    - alert: KafkaUnderMinIsrPartitions
+      expr: sum(kafka_server_replicamanager_underminisrpartitioncount) > 0
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: '{{ $value }} partition(s) sous min.insync.replicas'
+        description: Les écritures acks=all sont rejetées (NotEnoughReplicas) sur ces partitions.
+        runbook: docs/exploitation/04-runbooks.md#rb-04--réplication-dégradée
+    - alert: KafkaUnderReplicatedPartitions
+      expr: sum(kafka_server_replicamanager_underreplicatedpartitions) > 0
+      for: 5m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: '{{ $value }} partition(s) sous-répliquée(s) depuis 5 minutes'
+        description: Au moins une réplica n'est plus dans l'ISR. La durabilité est réduite.
+        runbook: docs/exploitation/04-runbooks.md#rb-04--réplication-dégradée
+    - alert: KafkaIsrFlapping
+      expr: sum(rate(kafka_server_replicamanager_isrshrinks_total[5m])) > 0.05
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: L'ISR se réduit et s'élargit en boucle
+        description: 'Des followers sortent et rentrent de l''ISR : réseau instable, GC longs ou disque lent.'
+        runbook: docs/exploitation/04-runbooks.md#rb-04--réplication-dégradée
+  - name: kafka-performance
+    rules:
+    - alert: KafkaRequestHandlerSaturated
+      expr: kafka_server_kafkarequesthandlerpool_requesthandleravgidlepercent < 0.3
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Threads I/O de {{ $labels.instance }} occupés à plus de 70 %
+        description: Le broker approche de la saturation. Voir le tableau de bord Cluster Kafka.
+        runbook: docs/exploitation/04-runbooks.md#rb-05--saturation-dun-broker
+    - alert: KafkaNetworkProcessorSaturated
+      expr: kafka_network_socketserver_networkprocessoravgidlepercent < 0.3
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Threads réseau de {{ $labels.instance }} occupés à plus de 70 %
+        description: Trop de connexions ou de petites requêtes ; vérifier les clients (batching).
+        runbook: docs/exploitation/04-runbooks.md#rb-05--saturation-dun-broker
+    - alert: KafkaProduceLatencyHigh
+      expr: kafka_network_requestmetrics_totaltimems{request="Produce", quantile="0.99"} > 200
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Latence Produce p99 de {{ $value }} ms sur {{ $labels.instance }}
+        description: 'Au-dessus de 200 ms pendant 10 minutes : le SLO de fraîcheur de 5 s est menacé.'
+        runbook: docs/exploitation/04-runbooks.md#rb-05--saturation-dun-broker
+    - alert: KafkaJvmHeapHigh
+      expr: "jvm_memory_used_bytes{area=\"heap\", job=~\"kafka-.*|schema-registry\"}\n  / jvm_memory_max_bytes{area=\"heap\", job=~\"kafka-.*|schema-registry\"} > 0.85\n"
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Heap JVM de {{ $labels.instance }} à {{ $value | humanizePercentage }}
+        description: Risque de pauses GC longues puis d'exclusion de l'ISR.
+        runbook: docs/exploitation/04-runbooks.md#rb-13--mémoire-jvm
+  - name: kafka-consumers
+    rules:
+    - alert: KafkaConsumerLagHigh
+      expr: sum by (consumergroup, topic) (kafka_consumergroup_lag) > 10000
+      for: 10m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Lag de {{ $value }} messages pour {{ $labels.consumergroup }} sur {{ $labels.topic }}
+        description: Le groupe consomme moins vite que la production depuis 10 minutes.
+        runbook: docs/exploitation/04-runbooks.md#rb-07--lag-consommateur
+    - alert: KafkaConsumerLagGrowing
+      expr: "deriv(sum by (consumergroup, topic) (kafka_consumergroup_lag)[15m:1m]) > 0\n  and sum by (consumergroup, topic) (kafka_consumergroup_lag) > 1000\n"
+      for: 15m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Lag en hausse continue pour {{ $labels.consumergroup }}
+        description: 'Le retard augmente depuis 15 minutes : le groupe ne rattrapera pas seul.'
+        runbook: docs/exploitation/04-runbooks.md#rb-07--lag-consommateur
+    - alert: KafkaCriticalConsumerGroupEmpty
+      expr: kafka_consumergroup_members{consumergroup=~"order-enrichment|connect-hdfs-sink"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Aucun membre actif dans le groupe {{ $labels.consumergroup }}
+        description: 'Le traitement est arrêté : les données ne progressent plus vers l''aval.'
+        runbook: docs/exploitation/04-runbooks.md#rb-07--lag-consommateur
+  - name: kafka-connect
+    rules:
+    - alert: KafkaConnectWorkerDown
+      expr: up{job="kafka-connect"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Worker Kafka Connect {{ $labels.instance }} injoignable
+        description: Les tâches de ce worker sont réassignées s'il reste des workers ; sinon CDC et dépôt HDFS sont arrêtés.
+        runbook: docs/exploitation/04-runbooks.md#rb-08--kafka-connect-en-échec
+    - alert: KafkaConnectConnectorFailed
+      expr: kafka_connect_connector_status{status="failed"} == 1
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Connecteur {{ $labels.connector }} en échec
+        description: 'Pour le connecteur CDC, le slot PostgreSQL retient le WAL : risque de saturation disque de la base.'
+        runbook: docs/exploitation/04-runbooks.md#rb-08--kafka-connect-en-échec
+    - alert: KafkaConnectTaskFailed
+      expr: kafka_connect_connector_task_status{status="failed"} == 1
+      for: 1m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Tâche {{ $labels.task }} du connecteur {{ $labels.connector }} en échec
+        description: Une tâche en échec ne redémarre pas seule. Lire la trace via l'API REST /status.
+        runbook: docs/exploitation/04-runbooks.md#rb-08--kafka-connect-en-échec
+    - alert: KafkaConnectDeadLetterQueue
+      expr: delta(kafka_connect_task_error_deadletterqueue_produce_requests[15m]) > 0
+      for: 0m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: '{{ $value }} message(s) envoyé(s) en DLQ par {{ $labels.connector }}'
+        description: Des messages n'ont pas pu être convertis ; ils sont dans platform.dlq.hdfs-sink.v1.
+        runbook: docs/exploitation/04-runbooks.md#rb-09--messages-en-dlq
+  - name: applications
+    rules:
+    - alert: OrderEnrichmentDown
+      expr: up{job="order-enrichment"} == 0 or sum by (client_id) (kafka_streams_client_state{state=~"ERROR|PENDING_ERROR|NOT_RUNNING"}) > 0
+      for: 2m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: order-enrichment arrêté ou en erreur
+        description: Les commandes ne sont plus enrichies ; le lag de order-enrichment va croître.
+        runbook: docs/exploitation/04-runbooks.md#rb-15--order-enrichment-arrêté
+    - alert: OrderDlqReceivingMessages
+      expr: sum(increase(kafka_server_brokertopicmetrics_messagesin_total{topic="orders.dlq.order-placed.v1"}[15m])) > 10
+      for: 0m
+      labels:
+        severity: warning
+        team: commandes
+      annotations:
+        summary: '{{ $value }} commandes rejetées en 15 minutes'
+        description: Analyser l'en-tête dlq.reason des messages de orders.dlq.order-placed.v1.
+        runbook: docs/exploitation/04-runbooks.md#rb-09--messages-en-dlq
+    - alert: IngestionApiErrorRateHigh
+      expr: "sum(rate(http_server_requests_seconds_count{job=\"ingestion-api\", status=~\"5..\"}[5m]))\n  / sum(rate(http_server_requests_seconds_count{job=\"ingestion-api\"}[5m])) > 0.05\n"
+      for: 5m
+      labels:
+        severity: critical
+        team: commandes
+      annotations:
+        summary: '{{ $value | humanizePercentage }} d''erreurs 5xx sur ingestion-api'
+        description: Souvent le signe que Kafka refuse les écritures (min ISR) ou est injoignable.
+        runbook: docs/exploitation/04-runbooks.md#rb-14--erreurs-ingestion-api
+  - name: servitudes
+    rules:
+    - alert: Watchdog
+      expr: vector(1)
+      labels:
+        severity: none
+        team: plateforme
+      annotations:
+        summary: Chaîne d'alerte opérationnelle
+        description: Alerte de contrôle permanente. Si l'outil d'astreinte ne la reçoit plus, la supervision est aveugle.
+        runbook: docs/exploitation/03-supervision.md#catalogue-des-alertes
+    - alert: EndpointDown
+      expr: probe_success == 0
+      for: 2m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: '{{ $labels.instance }} ne répond pas'
+        description: Sonde {{ $labels.job }} en échec depuis 2 minutes (Schema Registry, Connect, HDFS, PostgreSQL, API...).
+        runbook: docs/exploitation/04-runbooks.md#rb-10--point-dentrée-ou-servitude-indisponible
+    - alert: DiskUsageHigh
+      expr: "(1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"}\n   / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"}) > 0.75\n"
+      for: 15m
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Disque {{ $labels.mountpoint }} de {{ $labels.instance }} rempli à {{ $value | humanizePercentage }}
+        description: Au-delà de 85 % l'alerte devient critique ; un disque plein arrête le broker.
+        runbook: docs/exploitation/04-runbooks.md#rb-06--disque-plein
+    - alert: DiskUsageCritical
+      expr: "(1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"}\n   / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"}) > 0.85\n"
+      for: 5m
+      labels:
+        severity: critical
+        team: plateforme
+      annotations:
+        summary: Disque {{ $labels.mountpoint }} de {{ $labels.instance }} rempli à {{ $value | humanizePercentage }}
+        description: 'Agir immédiatement : réduire la rétention temporairement ou ajouter du disque.'
+        runbook: docs/exploitation/04-runbooks.md#rb-06--disque-plein
+    - alert: TlsCertificateExpiringSoon
+      expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 21
+      for: 1h
+      labels:
+        severity: warning
+        team: plateforme
+      annotations:
+        summary: Certificat de {{ $labels.instance }} expirant dans {{ $value | humanize }} jours
+        description: Renouveler via la PKI (VM) ou vérifier le renouvellement Strimzi (Kubernetes).
+        runbook: docs/exploitation/04-runbooks.md#rb-11--certificats
+    - alert: ClockDriftHigh
+      expr: abs(node_timex_offset_seconds) > 0.1
+      for: 10m
+      labels:
+        severity: warning
+        team: systeme
+      annotations:
+        summary: Dérive horaire de {{ $value }} s sur {{ $labels.instance }}
+        description: Les timestamps des événements et les fenêtres temporelles deviennent faux.
+        runbook: docs/exploitation/04-runbooks.md#rb-12--dérive-horaire
+  - name: socle-sli
+    rules:
+    - record: socle:produce_requests:rate5m
+      expr: sum(rate(kafka_network_requestmetrics_requests_total{request="Produce"}[5m]))
+    - record: socle:messages_in:rate5m
+      expr: sum(rate(kafka_server_brokertopicmetrics_messagesin_total{topic!=""}[5m]))
+    - record: socle:consumer_lag:sum
+      expr: sum by (consumergroup) (kafka_consumergroup_lag)
+    - record: socle:ingestion_availability:ratio_rate5m
+      expr: "1 - (sum(rate(http_server_requests_seconds_count{job=\"ingestion-api\", status=~\"5..\"}[5m]))\n     / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"ingestion-api\"}[5m])), 1e-9))\n"
