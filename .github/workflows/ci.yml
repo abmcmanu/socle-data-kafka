@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROMETHEUS_VERSION: "3.5.0"
+  ALERTMANAGER_VERSION: "0.28.1"
+  KUBECONFORM_VERSION: "0.6.7"
+
+jobs:
+  gouvernance:
+    name: Gouvernance as code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml yamllint
+      - name: Catalogue des topics valide et fichiers générés à jour
+        run: python3 tools/topics.py --check
+      - name: Tableaux de bord à jour
+        run: python3 tools/gen_dashboards.py --check
+      - name: Supervision Strimzi synchronisée
+        run: python3 tools/sync_strimzi_monitoring.py --check
+      - name: Schémas Avro résolus
+        run: python3 tools/register_schemas.py --resolve-only > /dev/null
+      - name: Liens internes et runbooks
+        run: python3 tools/check_links.py
+      - name: yamllint
+        run: yamllint -s .
+      - name: shellcheck
+        run: shellcheck -x --source-path=SCRIPTDIR -S warning scripts/ops/*.sh governance/generated/create-topics.sh
+      - name: Aucun secret versionné
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  supervision:
+    name: Règles Prometheus et Alertmanager
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Outils promtool et amtool
+        run: |
+          curl -sSL https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz | tar xz
+          curl -sSL https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz | tar xz
+      - name: Syntaxe des règles
+        run: ./prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool check rules monitoring/prometheus/rules/*.yml
+      - name: Tests unitaires des alertes
+        run: ./prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool test rules monitoring/prometheus/tests/*.yml
+      - name: Configuration Alertmanager
+        run: ./alertmanager-${ALERTMANAGER_VERSION}.linux-amd64/amtool check-config monitoring/alertmanager/alertmanager.yml
+
+  java:
+    name: Services Java (build + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: mvn verify
+        run: mvn -B -f services/pom.xml verify
+      - name: Rapports de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: services/**/target/surefire-reports/
+          if-no-files-found: ignore
+
+  ansible:
+    name: Ansible (syntaxe + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run: {working-directory: platform/ansible}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install ansible-core ansible-lint
+      - run: ansible-galaxy collection install -r requirements.yml
+      - name: Syntaxe de chaque playbook
+        run: for p in playbooks/*.yml; do ansible-playbook --syntax-check -i inventories/prod/hosts.yml "$p"; done
+      - name: ansible-lint (profil production)
+        run: ansible-lint playbooks/ roles/
+
+  kubernetes:
+    name: Manifestes Strimzi / Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -summary -strict -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -ignore-filename-pattern kustomization.yaml \
+            $(find platform/strimzi -name '*.yaml')
+      - name: kustomize build
+        run: kubectl kustomize platform/strimzi > /dev/null
+
+  lab:
+    name: Lab Docker de bout en bout (smoke test)
+    runs-on: ubuntu-latest
+    needs: [gouvernance, java]
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "21", cache: maven}
+      - name: Démarrer le socle
+        run: make up
+      - name: Attendre les applications
+        run: |
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:8090/actuator/health/readiness && break
+            sleep 10
+          done
+      - name: Démonstration
+        run: make demo
+      - name: Contrôle de santé
+        run: sleep 30 && make health
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: docker compose -f platform/docker-compose/docker-compose.yml --env-file platform/docker-compose/.env logs --tail 200
+      - name: Arrêt ordonné
+        if: always()
+        run: make down
