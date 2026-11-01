@@ -2,15 +2,7 @@
 
 Le socle **alimente** le data lake Hadoop existant ; il ne le remplace pas (ADR 0004).
 
-```mermaid
-flowchart LR
-  K[["Topics Kafka"]] --> HS["Kafka Connect\nHDFS Sink"]
-  HS -->|"fichiers Avro\nrotation 10 min"| R[("hdfs:///data/raw/<topic>/dt=AAAA-MM-JJ")]
-  HS -->|"journal d'écriture"| W[("hdfs:///data/connect-wal")]
-  R --> H["Tables Hive externes\nbase raw"]
-  H --> Q["Contrôles qualité quotidiens"]
-  H --> BI["Spark / BI existants"]
-```
+![Dépôt des topics dans HDFS](../docs/diagrams/depot-hadoop.excalidraw.svg)
 
 | Élément | Lab | Production |
 | --- | --- | --- |

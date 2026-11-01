@@ -5,12 +5,7 @@ applique les règles ci-dessous.
 
 ## Modèle en trois couches
 
-```mermaid
-flowchart LR
-  APP["Application"] -->|"1. TLS 1.3 : chiffrement"| L["Listener SASL_SSL / mTLS"]
-  L -->|"2. Authentification : SCRAM-SHA-512 ou certificat client"| P["Principal User:svc-..."]
-  P -->|"3. Autorisation : ACL StandardAuthorizer"| R["Topic / Groupe / TransactionalId"]
-```
+![Chiffrement, authentification, autorisation](../diagrams/securite-couches.excalidraw.svg)
 
 | Couche | VM (Ansible) | Kubernetes (Strimzi) |
 | --- | --- | --- |

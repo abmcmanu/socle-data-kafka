@@ -6,35 +6,7 @@ Une cinquième couche transverse, **exploitation**, supervise et pilote l'ensemb
 
 ## Vue de contexte
 
-```mermaid
-flowchart TB
-  CLI["Clients web / mobile / magasins"] --> API
-  subgraph SI["Système d'information"]
-    API["ingestion-api"]
-    CRM[("PostgreSQL CRM")]
-  end
-  subgraph SOCLE["Socle Data Kafka"]
-    K["Cluster Kafka"]
-    SR["Schema Registry"]
-    KC["Kafka Connect"]
-    KS["Applications Kafka Streams"]
-  end
-  subgraph LAKE["Data lake"]
-    HDFS[("HDFS")]
-    HIVE["Hive"]
-  end
-  subgraph OPS["Exploitation"]
-    MON["Prometheus / Grafana / Alertmanager"]
-    ANS["Ansible / Strimzi"]
-    GIT["Git (topics, schémas, ACL as code)"]
-  end
-  API --> K
-  CRM --> KC --> K
-  K --> KS --> K
-  K --> KC --> HDFS --> HIVE
-  SOCLE -.-> MON
-  GIT --> ANS --> SOCLE
-```
+![Vue de contexte](../diagrams/vue-contexte.excalidraw.svg)
 
 ## Vue des conteneurs
 
@@ -52,25 +24,7 @@ flowchart TB
 
 ## Vue de déploiement
 
-```mermaid
-flowchart LR
-  subgraph AZ1["Zone A"]
-    C1["controller-1"]
-    B1["broker-1"]
-  end
-  subgraph AZ2["Zone B"]
-    C2["controller-2"]
-    B2["broker-2"]
-  end
-  subgraph AZ3["Zone C"]
-    C3["controller-3"]
-    B3["broker-3"]
-  end
-  B1 <--> B2
-  B2 <--> B3
-  B1 <--> B3
-  C1 --- C2 --- C3
-```
+![Vue de déploiement sur trois zones](../diagrams/vue-deploiement.excalidraw.svg)
 
 - `broker.rack` = zone : chaque partition a une réplica par zone. La perte d'une zone entière ne
   perd aucune donnée et laisse 2 réplicas sur 3, donc `min.insync.replicas=2` reste satisfait.

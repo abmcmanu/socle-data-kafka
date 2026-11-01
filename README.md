@@ -25,45 +25,7 @@ Détails et objectifs chiffrés : [docs/architecture/00-probleme-et-objectifs.md
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph Sources
-    WEB["Site web / mobile"]
-    PG[("PostgreSQL CRM")]
-  end
-  subgraph Socle["Socle Kafka (KRaft, 3 contrôleurs + 3 brokers)"]
-    API["ingestion-api\n(Spring Boot, producer idempotent)"]
-    DBZ["Kafka Connect\nDebezium CDC"]
-    T1[["orders.evt.order-placed.v1"]]
-    T2[["crm.cdc.customers.v1\n(compacté)"]]
-    ST["order-enrichment\n(Kafka Streams, exactly-once)"]
-    T3[["orders.evt.order-enriched.v1"]]
-    T4[["analytics.agg.revenue-by-country-1m.v1"]]
-    DLQ[["orders.dlq.order-placed.v1"]]
-    SR["Schema Registry\n(Avro, BACKWARD)"]
-    HS["Kafka Connect\nHDFS Sink"]
-  end
-  subgraph Lake["Data lake Hadoop"]
-    HDFS[("HDFS /data/raw")]
-    HIVE["Tables Hive externes"]
-  end
-  subgraph Obs["Supervision"]
-    PROM["Prometheus"] --> GRAF["Grafana"]
-    PROM --> AM["Alertmanager"]
-  end
-  WEB -->|REST| API --> T1
-  PG -->|WAL logique| DBZ --> T2
-  T1 --> ST
-  T2 --> ST
-  ST --> T3
-  ST --> T4
-  ST --> DLQ
-  T3 --> HS --> HDFS --> HIVE
-  T4 --> HS
-  API -.-> SR
-  ST -.-> SR
-  Socle -.métriques JMX.-> PROM
-```
+![Architecture du socle](docs/diagrams/architecture-socle.excalidraw.svg)
 
 Vue détaillée, flux, décisions : [docs/architecture/](docs/architecture/) et [docs/adr/](docs/adr/).
 

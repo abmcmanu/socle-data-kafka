@@ -2,25 +2,7 @@
 
 ## Flux 1 — Commande passée (temps réel)
 
-```mermaid
-sequenceDiagram
-  participant C as Client web
-  participant A as ingestion-api
-  participant K as Kafka
-  participant S as order-enrichment
-  participant H as HDFS Sink
-  C->>A: POST /api/v1/orders
-  A->>A: validation + eventId (UUID)
-  A->>K: send(orders.evt.order-placed.v1, key=orderId) acks=all, idempotent
-  K-->>A: ACK (répliqué sur 2 réplicas au moins)
-  A-->>C: 202 Accepted {eventId, partition, offset}
-  K->>S: poll (read_committed)
-  S->>S: validation → DLQ si invalide
-  S->>S: re-clé par customerId, jointure KTable clients
-  S->>K: transaction : enriched + agrégat + offsets
-  K->>H: poll orders.evt.order-enriched.v1
-  H->>H: fichiers Avro dt=AAAA-MM-JJ, rotation 10 min
-```
+![Séquence d'une commande passée](../diagrams/flux-commande.excalidraw.svg)
 
 | Étape | Garantie | Mécanisme |
 | --- | --- | --- |
@@ -31,13 +13,7 @@ sequenceDiagram
 
 ## Flux 2 — Clients CRM (CDC)
 
-```mermaid
-flowchart LR
-  PG[("PostgreSQL\nwal_level=logical")] -->|slot de réplication| DBZ["Debezium\nPostgresConnector"]
-  DBZ -->|SMT unwrap + clé = id| T[["crm.cdc.customers.v1\ncleanup.policy=compact"]]
-  T --> KT["KTable clients\n(order-enrichment)"]
-  T --> HS["HDFS Sink\n(historique)"]
-```
+![Capture des changements du CRM](../diagrams/flux-cdc.excalidraw.svg)
 
 - Le topic est **compacté** : il contient au moins le dernier état de chaque client, ce qui permet à
   un nouveau consommateur de reconstruire la table complète sans relire la base.
