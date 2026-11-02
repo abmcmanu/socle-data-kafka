@@ -1,4 +1,4 @@
-# ADR 0003 — Ansible sur VM aujourd'hui, Strimzi sur Kubernetes en cible
+# ADR 0003 : Ansible sur VM aujourd'hui, Strimzi sur Kubernetes en cible
 
 **Statut** : acceptée
 
@@ -8,8 +8,8 @@ L'exploitation maîtrise les VM et Ansible ; la DSI vise Kubernetes à 18 mois.
 
 ## Décision
 
-- **Ansible** : rôles `kafka_controller`, `kafka_broker`, `schema_registry`, `kafka_connect`,
-  `monitoring`, et playbooks d'exploitation (arrêt, relance, rolling restart, contrôle).
+- **Ansible** : rôles `common`, `kafka` (contrôleur ou broker selon le groupe d'inventaire),
+  `schema_registry`, `kafka_connect`, `monitoring_agent`, `monitoring_stack`, et playbooks d'exploitation (arrêt, relance, rolling restart, contrôle).
 - **Strimzi** (opérateur Kubernetes, CNCF) : ressources `Kafka`, `KafkaNodePool`, `KafkaTopic`,
   `KafkaUser`, `KafkaConnect`, `KafkaConnector`.
 - La configuration logique (topics, ACL, règles JMX, alertes) est **partagée** : générée depuis

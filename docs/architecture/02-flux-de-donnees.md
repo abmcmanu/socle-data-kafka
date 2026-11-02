@@ -1,6 +1,6 @@
-# 02 — Flux de données et garanties de bout en bout
+# Flux de données et garanties de bout en bout
 
-## Flux 1 — Commande passée (temps réel)
+## Flux 1 : commande passée (temps réel)
 
 ![Séquence d'une commande passée](../diagrams/flux-commande.excalidraw.svg)
 
@@ -11,7 +11,7 @@
 | Kafka → Streams → Kafka | Exactly-once | `processing.guarantee=exactly_once_v2` |
 | Kafka → HDFS | Exactly-once sur les fichiers | Le connecteur HDFS stocke ses offsets dans les noms de fichiers et reprend sans doublon |
 
-## Flux 2 — Clients CRM (CDC)
+## Flux 2 : clients CRM (CDC)
 
 ![Capture des changements du CRM](../diagrams/flux-cdc.excalidraw.svg)
 
@@ -22,7 +22,7 @@
   surveille donc l'état du connecteur (alerte `KafkaConnectTaskFailed`), sinon le disque de la base
   se remplit. Voir [runbook RB-08](../exploitation/04-runbooks.md).
 
-## Flux 3 — Dépôt dans le data lake Hadoop
+## Flux 3 : dépôt dans le data lake Hadoop
 
 | Topic | Répertoire HDFS | Partitionnement | Table Hive |
 | --- | --- | --- | --- |
@@ -47,8 +47,7 @@ temps réel, pour ne pas mélanger l'ordre des événements.
 | Jointure avec le client | `customerId` (re-clé interne) | Topic de repartitionnement géré par Kafka Streams |
 | État d'un client | `id` client | Compaction par client |
 
-Il n'existe **aucun ordre global** entre commandes de partitions différentes, et le socle n'en a pas
-besoin : c'est un choix de conception explicite.
+Il n'existe pas d'ordre global entre commandes de partitions différentes ; le socle n'en a pas besoin.
 
 ## Gestion des erreurs
 

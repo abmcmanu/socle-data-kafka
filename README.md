@@ -1,13 +1,15 @@
-# Socle Data Kafka — plateforme d'événements temps réel
+# Socle Data Kafka
+
+Plateforme d'événements temps réel.
 
 Socle de données d'entreprise construit sur **Apache Kafka 4 (KRaft)** : ingestion temps réel,
 capture des changements des bases (CDC), traitement en flux, dépôt dans le **data lake Hadoop**,
 gouvernance des données « as code », supervision **Prometheus / Grafana**, déploiement
 **Ansible** (VM) et **Strimzi** (Kubernetes), et dossier d'exploitation complet.
 
-> Projet de portfolio conçu pour démontrer un niveau architecte sur Kafka (préparation CCDAK + CCAAK).
+Projet personnel mené en parallèle de la préparation des certifications CCDAK et CCAAK.
 
-## Le problème résolu
+## Contexte
 
 Une enseigne omnicanale (site web, application mobile, magasins) fait circuler ses données par
 des **traitements batch nocturnes** et des **intégrations point à point** :
@@ -70,7 +72,7 @@ make down         # arrêt propre dans l'ordre inverse
 | ingestion-api | http://localhost:8090/swagger-ui.html |
 | HDFS NameNode | http://localhost:9870 |
 
-## Garanties de conception (résumé)
+## Garanties de conception
 
 | Exigence | Mécanisme |
 | --- | --- |

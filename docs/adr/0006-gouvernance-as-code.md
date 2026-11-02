@@ -1,4 +1,4 @@
-# ADR 0006 — Gouvernance « as code »
+# ADR 0006 : Gouvernance « as code »
 
 **Statut** : acceptée
 

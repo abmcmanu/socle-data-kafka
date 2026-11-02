@@ -1,4 +1,4 @@
-# 05 — Dimensionnement
+# Dimensionnement
 
 Calcul fait pour la charge de pointe (soldes), avec une marge de croissance de 18 mois.
 

@@ -1,4 +1,4 @@
-# 01 — Architecture cible
+# Architecture cible
 
 Le socle s'organise en quatre couches : **production** (sources), **transport** (Kafka et ses
 composants), **traitement** (applications de flux), **restitution** (data lake et consommateurs).

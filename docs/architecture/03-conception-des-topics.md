@@ -1,4 +1,4 @@
-# 03 — Conception des topics
+# Conception des topics
 
 Le catalogue [`governance/topics/catalog.yaml`](../../governance/topics/catalog.yaml) est la seule
 source de vérité. Ce document explique **pourquoi** chaque paramètre a cette valeur.

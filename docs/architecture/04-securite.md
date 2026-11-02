@@ -1,4 +1,4 @@
-# 04 — Sécurité
+# Sécurité
 
 Le lab Docker fonctionne en clair pour rester simple. La **production** (Ansible `prod` et Strimzi)
 applique les règles ci-dessous.
@@ -27,7 +27,7 @@ applique les règles ci-dessous.
 
 Traduction exacte : [`platform/strimzi/users/`](../../platform/strimzi/users).
 
-Points souvent oubliés (et demandés à l'examen) :
+À ne pas oublier :
 
 - un consommateur a besoin de **Read sur le topic ET sur le groupe** ;
 - une application Kafka Streams en exactly-once a besoin de **Write sur son TransactionalId** et de

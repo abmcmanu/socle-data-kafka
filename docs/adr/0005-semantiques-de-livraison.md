@@ -1,4 +1,4 @@
-# ADR 0005 — Sémantiques de livraison
+# ADR 0005 : Sémantiques de livraison
 
 **Statut** : acceptée
 

@@ -1,4 +1,4 @@
-# ADR 0002 — Avro et Schema Registry
+# ADR 0002 : Avro et Schema Registry
 
 **Statut** : acceptée
 

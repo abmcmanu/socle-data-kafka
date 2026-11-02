@@ -61,7 +61,7 @@ x-controller-healthcheck: &controller-healthcheck
   retries: 12
 
 services:
-  # ---------------------------------------------------------------- initialisation
+  # initialisation
   # Télécharge l'agent JMX Exporter et donne les volumes de données à l'utilisateur Kafka (uid 1000).
   lab-init:
     image: curlimages/curl:8.11.1
@@ -85,7 +85,7 @@ services:
       - broker-2-data:/data/b2
       - broker-3-data:/data/b3
 
-  # ---------------------------------------------------------------- quorum KRaft
+  # quorum KRaft
   controller-1:
     <<: *kafka-base
     hostname: controller-1
@@ -107,7 +107,7 @@ services:
     volumes: [jmx-agent:/opt/jmx:ro, ../../monitoring/jmx-exporter/kafka-broker.yml:/etc/jmx/kafka-broker.yml:ro, controller-3-data:/var/lib/kafka/data]
     healthcheck: *controller-healthcheck
 
-  # ---------------------------------------------------------------- brokers
+  # brokers
   broker-1:
     <<: *kafka-base
     hostname: broker-1
@@ -166,7 +166,7 @@ services:
     volumes:
       - ../../governance:/governance:ro
 
-  # ---------------------------------------------------------------- Schema Registry
+  # Schema Registry
   schema-registry:
     image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-8.0.0}
     hostname: schema-registry
@@ -202,7 +202,7 @@ services:
       - ../../tools:/repo/tools:ro
       - ../../governance:/repo/governance:ro
 
-  # ---------------------------------------------------------------- base source CRM
+  # base source CRM
   postgres:
     image: postgres:16.4
     hostname: postgres
@@ -222,7 +222,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ---------------------------------------------------------------- data lake Hadoop (lab)
+  # data lake Hadoop (lab)
   namenode:
     image: apache/hadoop:${HADOOP_VERSION:-3.4.1}
     hostname: namenode
@@ -248,7 +248,7 @@ services:
       namenode: {condition: service_healthy}
     env_file: [../../hadoop/config/hadoop.env]
 
-  # ---------------------------------------------------------------- Kafka Connect
+  # Kafka Connect
   connect:
     build:
       context: ../../connectors
@@ -300,7 +300,7 @@ services:
       - ../../scripts:/repo/scripts:ro
       - ../../connectors:/repo/connectors:ro
 
-  # ---------------------------------------------------------------- applications
+  # applications
   ingestion-api:
     build: {context: ../../services/ingestion-api}
     image: socle/ingestion-api:local
@@ -332,7 +332,7 @@ services:
       - ../../monitoring/jmx-exporter/kafka-streams.yml:/etc/jmx/kafka-streams.yml:ro
       - enrichment-state:/var/lib/order-enrichment
 
-  # ---------------------------------------------------------------- supervision
+  # supervision
   kafka-exporter:
     image: danielqsj/kafka-exporter:v1.9.0
     restart: unless-stopped

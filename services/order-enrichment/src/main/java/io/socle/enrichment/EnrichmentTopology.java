@@ -33,24 +33,11 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.WindowStore;
 
 /**
- * Topologie d'enrichissement :
+ * Validation, jointure client et agrégat par pays. Schéma :
+ * docs/diagrams/topologie-order-enrichment.excalidraw.svg
  *
- * <pre>
- * orders.evt.order-placed.v1 ──► validation ──(invalide)──► orders.dlq.order-placed.v1 (+ en-tête dlq.reason)
- *                                    │
- *                                 (valide)
- *                                    ▼
- *                re-clé customerId ─► repartition « orders-by-customer »
- *                                    ▼
- *   crm.cdc.customers.v1 ─► KTable ─► leftJoin ─► re-clé orderId ─► orders.evt.order-enriched.v1
- *                                                       │
- *                                     groupBy pays:devise, fenêtre 1 min (grâce 30 s)
- *                                                       ▼
- *                         suppress(fin de fenêtre) ─► analytics.agg.revenue-by-country-1m.v1
- * </pre>
- *
- * Chaque opérateur porte un nom explicite : les topics et stores internes gardent un nom
- * stable quand la topologie évolue (sinon un redéploiement perdrait l'état).
+ * <p>Chaque opérateur est nommé pour que les topics et stores internes gardent un nom stable
+ * quand la topologie évolue.
  */
 public final class EnrichmentTopology {
 
@@ -68,7 +55,6 @@ public final class EnrichmentTopology {
                         .withTimestampExtractor(new OrderTimestampExtractor())
                         .withName("orders-source"));
 
-        // 1. Validation : les commandes invalides sont isolées sans arrêter le flux.
         Map<String, KStream<String, OrderPlaced>> branches = orders
                 .split(Named.as("validation-"))
                 .branch((orderId, order) -> OrderValidator.validate(order).isPresent(), Branched.as("invalid"))
@@ -78,14 +64,13 @@ public final class EnrichmentTopology {
                 .processValues(DlqReasonProcessor::new, Named.as("add-dlq-headers"))
                 .to(Topics.ORDERS_DLQ, Produced.with(Serdes.String(), serdes.orderPublic()).withName("dlq-sink"));
 
-        // 2. Table des clients : dernier état par id (topic compacté alimenté par Debezium).
         KTable<String, GenericRecord> customers = builder.table(Topics.CUSTOMERS,
                 Consumed.with(Serdes.String(), serdes.customer()).withName("customers-source"),
                 Materialized.<String, GenericRecord, KeyValueStore<Bytes, byte[]>>as("customers-store")
                         .withKeySerde(Serdes.String())
                         .withValueSerde(serdes.customer()));
 
-        // 3. Jointure : la commande doit être clé par customerId, comme la table (co-partitionnement).
+        // Re-clé par customerId pour le co-partitionnement avec la table clients.
         KStream<String, EnrichedOrder> enriched = branches.get("validation-valid")
                 .selectKey((orderId, order) -> order.getCustomerId(), Named.as("rekey-by-customer"))
                 .repartition(Repartitioned.<String, OrderPlaced>as("orders-by-customer")
@@ -102,7 +87,6 @@ public final class EnrichmentTopology {
         enriched.to(Topics.ORDERS_ENRICHED,
                 Produced.with(Serdes.String(), serdes.enrichedPublic()).withName("enriched-sink"));
 
-        // 4. Agrégat : CA et nombre de commandes par pays et devise, fenêtre fixe d'une minute.
         enriched
                 .groupBy((orderId, order) -> Enricher.countryOf(order) + ":" + order.getCurrency(),
                         Grouped.with("revenue-by-country", Serdes.String(), serdes.enrichedInternal()))
@@ -113,7 +97,6 @@ public final class EnrichmentTopology {
                         Materialized.<String, RevenueByCountry, WindowStore<Bytes, byte[]>>as("revenue-by-country-store")
                                 .withKeySerde(Serdes.String())
                                 .withValueSerde(serdes.revenueInternal()))
-                // Un seul résultat définitif par fenêtre, émis après la période de grâce.
                 .suppress(Suppressed.untilWindowCloses(Suppressed.BufferConfig.unbounded()).withName("revenue-final"))
                 .toStream(Named.as("revenue-to-stream"))
                 .map((windowedKey, agg) -> KeyValue.pair(windowedKey.key(), withWindow(agg, windowedKey.window())),

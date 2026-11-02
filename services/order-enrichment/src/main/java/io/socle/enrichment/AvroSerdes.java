@@ -21,8 +21,6 @@ import org.apache.kafka.common.serialization.Serde;
  *       ({@code order-enrichment-*}) ; leurs subjects n'existent pas à l'avance, l'application
  *       les enregistre elle-même.</li>
  * </ul>
- * Oublier cette distinction est une cause classique d'échec au démarrage
- * (« Subject '...-repartition-value' not found »).
  */
 public record AvroSerdes(
         Serde<OrderPlaced> orderPublic,

@@ -1,4 +1,4 @@
-# ADR 0001 — KRaft avec contrôleurs dédiés
+# ADR 0001 : KRaft avec contrôleurs dédiés
 
 **Statut** : acceptée
 
@@ -11,7 +11,7 @@ stocké dans le topic `__cluster_metadata`. Un nœud peut être broker, contrôl
 
 - 3 contrôleurs **dédiés** (`process.roles=controller`), un par zone, et des brokers dédiés.
 - Le mode combiné (`broker,controller`) est réservé aux environnements de développement.
-- Le lab Docker utilise aussi des rôles séparés, pour que l'apprentissage reflète la production.
+- Le lab Docker utilise aussi des rôles séparés, comme en production.
 
 ## Conséquences
 

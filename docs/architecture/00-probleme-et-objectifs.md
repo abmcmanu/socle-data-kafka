@@ -1,4 +1,4 @@
-# 00 — Problème et objectifs
+# Problème et objectifs
 
 ## Contexte
 
@@ -47,9 +47,9 @@ multi-région active-active (préparée dans le PRA mais non déployée).
 - Le data lake **Hadoop reste** la référence analytique : le socle l'alimente, il ne le remplace pas.
 - Composants open source ou sous licence communautaire uniquement.
 
-## Ce que démontre ce projet
+## Où trouver quoi
 
-| Compétence | Où la voir |
+| Sujet | Où |
 | --- | --- |
 | Conception de topics (clés, partitions, rétention, compaction) | [03-conception-des-topics.md](03-conception-des-topics.md), `governance/topics/catalog.yaml` |
 | Garanties de livraison de bout en bout | [02-flux-de-donnees.md](02-flux-de-donnees.md), services Java |

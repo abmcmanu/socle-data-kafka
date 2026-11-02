@@ -13,7 +13,7 @@
 - Kubernetes : mêmes configurations sous forme de `KafkaConnector` dans `platform/strimzi/connect/`.
 - `Dockerfile` : image Connect = Debezium + HDFS Sink + convertisseur Avro.
 
-## Pourquoi ces SMT
+## SMT utilisés
 
 | SMT | Rôle |
 | --- | --- |
@@ -22,5 +22,3 @@
 | `ExtractField$Key` | Clé = `id` texte (et non une structure) : co-partitionnement avec la re-clé `customerId` de order-enrichment |
 | `Filter` + `RecordIsTombstone` | Le format Avro HDFS ne stocke pas de valeur nulle : les suppressions restent dans Kafka |
 | `MaskField` + `TopicNameMatches` | Minimisation : l'e-mail n'arrive jamais dans le data lake |
-
-Attention : un SMT ne fait ni jointure ni agrégat. C'est le rôle de Kafka Streams (`services/order-enrichment`).

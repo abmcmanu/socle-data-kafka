@@ -7,11 +7,7 @@ metadata:
     app.kubernetes.io/part-of: socle-data
 data:
   kafka-metrics-config.yml: |
-    # Règles Prometheus JMX Exporter pour les brokers et contrôleurs Kafka (KRaft).
-    # Utilisé tel quel par le lab Docker et Ansible ; copié dans la ConfigMap Strimzi par
-    # tools/sync_strimzi_monitoring.py (la CI vérifie la synchronisation).
-    # Les noms produits (kafka_server_replicamanager_underreplicatedpartitions, ...) sont ceux
-    # utilisés par les tableaux de bord et les alertes de monitoring/.
+    # JMX Exporter, brokers et contrôleurs. Copié dans la ConfigMap Strimzi par tools/sync_strimzi_monitoring.py.
     lowercaseOutputName: true
     lowercaseOutputLabelNames: true
     rules:

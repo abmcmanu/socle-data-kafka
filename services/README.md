@@ -11,7 +11,11 @@ mvn -f services/pom.xml verify          # compile + tests (TopologyTestDriver, M
 mvn -f services/pom.xml package -DskipTests && make images
 ```
 
-## Points de conception à retenir (CCDAK)
+## Topologie de order-enrichment
+
+![Topologie Kafka Streams](../docs/diagrams/topologie-order-enrichment.excalidraw.svg)
+
+## Choix de conception
 
 - **Clé = identité métier** : `orderId` pour l'ordre par commande ; re-clé `customerId` explicite
   (`repartition("orders-by-customer")`) pour la jointure co-partitionnée avec la KTable clients.
@@ -21,7 +25,7 @@ mvn -f services/pom.xml package -DskipTests && make images
   (`LogAndContinueExceptionHandler`) ; erreur fatale → arrêt du client, relance par l'orchestrateur.
 - **Serdes publics / internes** : `auto.register.schemas=false` pour les topics gouvernés, `true` pour
   les topics internes de Kafka Streams (voir `AvroSerdes`).
-- **Producer de l'API** : chaque paramètre est commenté dans `KafkaConfig.java`.
+- **Producer de l'API** : configuration dans `KafkaConfig.java`.
 
 ## Tests
 

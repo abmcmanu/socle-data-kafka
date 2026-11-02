@@ -1,4 +1,4 @@
-# ADR 0004 — Dépôt dans HDFS par Kafka Connect
+# ADR 0004 : Dépôt dans HDFS par Kafka Connect
 
 **Statut** : acceptée
 

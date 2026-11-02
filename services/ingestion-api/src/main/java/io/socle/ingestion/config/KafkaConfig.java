@@ -15,8 +15,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Producer Kafka configuré pour la durabilité (voir docs/architecture/02-flux-de-donnees.md).
- * Chaque valeur est commentée : c'est exactement ce que demande la certification CCDAK.
+ * Producer orienté durabilité, voir docs/architecture/02-flux-de-donnees.md.
  */
 @Configuration
 public class KafkaConfig {
@@ -28,25 +27,22 @@ public class KafkaConfig {
         cfg.put(ProducerConfig.CLIENT_ID_CONFIG, "ingestion-api");
         cfg.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         cfg.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class);
-        // Durabilité : attendre toutes les réplicas de l'ISR (avec min.insync.replicas=2 côté topic).
+        // Avec min.insync.replicas=2 côté topic.
         cfg.put(ProducerConfig.ACKS_CONFIG, "all");
-        // Pas de doublon en cas de retry (PID + numéro de séquence par partition).
         cfg.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         cfg.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
-        // Borne totale d'un envoi (retries inclus) : au-delà, l'API répond 503.
+        // Au-delà, l'API répond 503.
         cfg.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30_000);
         cfg.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10_000);
-        // send() ne bloque pas plus de 5 s si le tampon est plein ou les métadonnées absentes.
         cfg.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 5_000);
-        // Débit : petits lots compressés ; 10 ms de latence ajoutée au maximum.
         cfg.put(ProducerConfig.LINGER_MS_CONFIG, 10);
         cfg.put(ProducerConfig.BATCH_SIZE_CONFIG, 64 * 1024);
         cfg.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "zstd");
-        // Contrats : le schéma doit déjà être enregistré par la CI (ADR 0002).
+        // Les schémas sont enregistrés par la CI (ADR 0002).
         cfg.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, props.schemaRegistryUrl());
         cfg.put(AbstractKafkaSchemaSerDeConfig.AUTO_REGISTER_SCHEMAS, false);
         cfg.put(AbstractKafkaSchemaSerDeConfig.USE_LATEST_VERSION, false);
-        // Sécurité (production) : security.protocol, sasl.mechanism, sasl.jaas.config, ssl.* ...
+        // security.*, sasl.*, ssl.* en production
         cfg.putAll(props.properties());
         return new KafkaProducer<>(cfg);
     }
