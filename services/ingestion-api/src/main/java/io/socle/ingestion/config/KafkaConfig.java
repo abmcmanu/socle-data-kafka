@@ -2,6 +2,7 @@ package io.socle.ingestion.config;
 
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import io.confluent.kafka.serializers.KafkaAvroSerializerConfig;
 import io.socle.events.OrderPlaced;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,6 +43,8 @@ public class KafkaConfig {
         cfg.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, props.schemaRegistryUrl());
         cfg.put(AbstractKafkaSchemaSerDeConfig.AUTO_REGISTER_SCHEMAS, false);
         cfg.put(AbstractKafkaSchemaSerDeConfig.USE_LATEST_VERSION, false);
+        // Retire avro.java.string des classes générées : sinon le schéma diffère du .avsc enregistré (erreur 40403).
+        cfg.put(KafkaAvroSerializerConfig.AVRO_REMOVE_JAVA_PROPS_CONFIG, true);
         // security.*, sasl.*, ssl.* en production
         cfg.putAll(props.properties());
         return new KafkaProducer<>(cfg);

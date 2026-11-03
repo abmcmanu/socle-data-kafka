@@ -48,7 +48,8 @@ x-broker-env: &broker-env
   KAFKA_OPTS: -javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/etc/jmx/kafka-broker.yml
 
 x-broker-healthcheck: &broker-healthcheck
-  test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null 2>&1"]
+  # KAFKA_OPTS vidé : sinon l'outil relance l'agent JMX sur le port 7071, déjà pris par le broker.
+  test: ["CMD-SHELL", "KAFKA_OPTS= /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null 2>&1"]
   interval: 20s
   timeout: 15s
   retries: 10
@@ -174,7 +175,7 @@ services:
     depends_on:
       topics-init: {condition: service_completed_successfully}
       lab-init: {condition: service_completed_successfully}
-    ports: ["8081:8081"]
+    ports: ["${SCHEMA_REGISTRY_PORT:-8081}:8081"]
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
@@ -262,7 +263,7 @@ services:
       schemas-init: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
       namenode: {condition: service_healthy}
-    ports: ["8083:8083"]
+    ports: ["${CONNECT_PORT:-8083}:8083"]
     environment:
       BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
       GROUP_ID: connect-socle
@@ -308,7 +309,7 @@ services:
     restart: unless-stopped
     depends_on:
       schemas-init: {condition: service_completed_successfully}
-    ports: ["8090:8090"]
+    ports: ["${INGESTION_API_PORT:-8090}:8090"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
@@ -348,8 +349,12 @@ services:
     image: prom/node-exporter:v1.9.1
     restart: unless-stopped
     pid: host
-    command: ["--path.rootfs=/host"]
-    volumes: ["/:/host:ro,rslave"]
+    # Sous Docker Desktop, on ne garde que le disque de la VM Docker : les partages du Mac
+    # (virtiofs, fakeowner...) et l'image système en lecture seule (erofs) déclencheraient DiskUsage*.
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|erofs|fakeowner|fuse\..*|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selfowner|selinuxfs|squashfs|sysfs|tmpfs|tracefs|virtiofs.*)$$
+    volumes: ["/:/host:ro"]
 
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.27.0
@@ -395,7 +400,7 @@ services:
     image: ghcr.io/kafbat/kafka-ui:v1.2.0
     restart: unless-stopped
     depends_on: *all-brokers
-    ports: ["8080:8080"]
+    ports: ["${KAFKA_UI_PORT:-8080}:8080"]
     environment:
       KAFKA_CLUSTERS_0_NAME: socle-lab
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker-1:19092,broker-2:19092,broker-3:19092

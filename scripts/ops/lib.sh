@@ -5,14 +5,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE=(docker compose -f "$ROOT/platform/docker-compose/docker-compose.yml" --env-file "$ROOT/platform/docker-compose/.env")
 KBIN=/opt/kafka/bin
 BOOT=broker-1:19092
-CONNECT_URL=${CONNECT_URL:-http://localhost:8083}
+
+# Port publié sur l'hôte : valeur du .env du lab, sinon la valeur par défaut donnée.
+env_port() {
+  local v
+  v=$(sed -n "s/^$1=//p" "$ROOT/platform/docker-compose/.env" 2>/dev/null | tail -n 1) || true
+  echo "${v:-$2}"
+}
+CONNECT_URL=${CONNECT_URL:-http://localhost:$(env_port CONNECT_PORT 8083)}
+SCHEMA_REGISTRY_URL=${SCHEMA_REGISTRY_URL:-http://localhost:$(env_port SCHEMA_REGISTRY_PORT 8081)}
 
 c_ok()   { printf '  \033[32m[OK]\033[0m  %s\n' "$*"; }
 c_ko()   { printf '  \033[31m[KO]\033[0m  %s\n' "$*"; }
 c_warn() { printf '  \033[33m[!!]\033[0m  %s\n' "$*"; }
 step()   { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
-kexec() { "${COMPOSE[@]}" exec -T "${KEXEC_HOST:-broker-1}" "$@"; }
+# KAFKA_OPTS vidé : sinon l'outil relance l'agent JMX sur le port déjà pris par le broker et échoue.
+kexec() { "${COMPOSE[@]}" exec -T -e KAFKA_OPTS= "${KEXEC_HOST:-broker-1}" "$@"; }
 
 # Nombre de lignes renvoyées par kafka-topics --describe <filtre> (0 = sain).
 count_partitions() { kexec "$KBIN/kafka-topics.sh" --bootstrap-server "$BOOT" --describe "$1" 2>/dev/null | grep -c 'Partition:' || true; }

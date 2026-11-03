@@ -30,7 +30,7 @@ for g in order-enrichment connect-hdfs-sink; do
 done
 
 step "Schema Registry"
-if subjects=$(curl -fs http://localhost:8081/subjects); then c_ok "$(tr -cd ',' <<<"$subjects" | wc -c | awk '{print $1+1}') subjects enregistrés"; else c_ko "injoignable"; critical=1; fi
+if subjects=$(curl -fs "$SCHEMA_REGISTRY_URL/subjects"); then c_ok "$(tr -cd ',' <<<"$subjects" | wc -c | awk '{print $1+1}') subjects enregistrés"; else c_ko "injoignable"; critical=1; fi
 
 step "Kafka Connect"
 if status=$(curl -fs "$CONNECT_URL/connectors?expand=status"); then

@@ -2,6 +2,7 @@
 COMPOSE_DIR := platform/docker-compose
 COMPOSE     := docker compose -f $(COMPOSE_DIR)/docker-compose.yml --env-file $(COMPOSE_DIR)/.env
 MVN         := mvn -B -f services/pom.xml
+-include $(COMPOSE_DIR)/.env
 
 .DEFAULT_GOAL := help
 .PHONY: help env build images up down start stop health demo logs generate check test clean-volumes
@@ -22,7 +23,7 @@ images: env ## Construit les images (services + Kafka Connect)
 
 up: env images ## Démarre tout le lab (ordre géré par depends_on)
 	$(COMPOSE) up -d
-	@echo "Grafana http://localhost:3000 · Kafka UI http://localhost:8080 · API http://localhost:8090/swagger-ui.html"
+	@echo "Grafana http://localhost:3000 · Kafka UI http://localhost:$(or $(KAFKA_UI_PORT),8080) · API http://localhost:$(or $(INGESTION_API_PORT),8090)/swagger-ui.html"
 
 start: env ## Relance ordonnée et contrôlée (PROC-03)
 	scripts/ops/start-platform.sh

@@ -1,6 +1,7 @@
 package io.socle.enrichment;
 
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
+import io.confluent.kafka.serializers.KafkaAvroSerializerConfig;
 import io.confluent.kafka.streams.serdes.avro.GenericAvroSerde;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import io.socle.events.EnrichedOrder;
@@ -46,6 +47,8 @@ public record AvroSerdes(
         Map<String, Object> cfg = new HashMap<>(extra);
         cfg.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, url);
         cfg.put(AbstractKafkaSchemaSerDeConfig.AUTO_REGISTER_SCHEMAS, autoRegister);
+        // Retire avro.java.string des classes générées : sinon le schéma diffère du .avsc enregistré (erreur 40403).
+        cfg.put(KafkaAvroSerializerConfig.AVRO_REMOVE_JAVA_PROPS_CONFIG, true);
         return cfg;
     }
 

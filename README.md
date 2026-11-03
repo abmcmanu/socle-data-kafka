@@ -72,6 +72,8 @@ make down         # arrêt propre dans l'ordre inverse
 | ingestion-api | http://localhost:8090/swagger-ui.html |
 | HDFS NameNode | http://localhost:9870 |
 
+Si un port est déjà pris, change-le dans `platform/docker-compose/.env` : `KAFKA_UI_PORT`, `SCHEMA_REGISTRY_PORT`, `CONNECT_PORT` ou `INGESTION_API_PORT`.
+
 ## Garanties de conception
 
 | Exigence | Mécanisme |
